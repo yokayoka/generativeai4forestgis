@@ -2,471 +2,340 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>地理院地図ビューア</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>樹種当てクイズマップ｜熊本県林業研究・研修センター</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  // unpkg が使えない環境向けの予備（cdnjs）
+  if (!window.L) {
+    document.write('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">');
+    document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"><\/script>');
+  }
+</script>
 <style>
-  html, body { margin: 0; height: 100%; font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif; }
-  #map { position: absolute; inset: 0; }
-
-  .panel {
-    position: absolute; top: 10px; left: 54px; z-index: 1000;
-    display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
-    background: #fff; padding: 6px 8px; border-radius: 6px;
-    box-shadow: 0 1px 5px rgba(0,0,0,.35);
+  :root{
+    --green:#2f6b3a; --green-d:#1f4a27; --ink:#1d2a20; --muted:#5f6d62;
+    --bg:#f6f4ee; --card:#ffffff; --line:#dcd8cc;
+    --gai:#d9480f;   /* 該当 */
+    --hi:#1c7ed6;    /* 非該当 */
+    --ok:#2b8a3e; --ng:#c92a2a;
   }
-  .panel input[type=search] {
-    width: 200px; padding: 6px 8px; font-size: 14px;
-    border: 1px solid #bbb; border-radius: 4px;
-  }
-  button {
-    padding: 6px 10px; font-size: 14px; cursor: pointer;
-    border: 1px solid #1a5fb4; background: #1a5fb4; color: #fff; border-radius: 4px;
-  }
-  button.sub { background: #fff; color: #1a5fb4; }
-  button.on  { background: #c01c28; border-color: #c01c28; color: #fff; }
-  button.small { padding: 2px 6px; font-size: 12px; }
-
-  #results {
-    position: absolute; top: 56px; left: 54px; z-index: 1000;
-    max-height: 50vh; overflow-y: auto; width: 320px;
-    background: #fff; border-radius: 6px; box-shadow: 0 1px 5px rgba(0,0,0,.35);
-    display: none; font-size: 14px;
-  }
-  #results div { padding: 8px 10px; border-bottom: 1px solid #eee; cursor: pointer; }
-  #results div:hover { background: #eef4fc; }
-
-  /* GISデータパネル */
-  #gisPanel {
-    position: absolute; left: 10px; bottom: 36px; z-index: 1000;
-    width: 300px; max-height: 45vh; overflow-y: auto;
-    background: #fff; border-radius: 6px; box-shadow: 0 1px 5px rgba(0,0,0,.35);
-    font-size: 13px;
-  }
-  #gisPanel h3 {
-    margin: 0; padding: 8px 10px; font-size: 14px; background: #1a5fb4; color: #fff;
-    border-radius: 6px 6px 0 0; display: flex; justify-content: space-between; align-items: center;
-    cursor: pointer; user-select: none;
-  }
-  #gisBody { padding: 8px 10px; }
-  #gisPanel.collapsed #gisBody { display: none; }
-  #gisPanel.collapsed h3 { border-radius: 6px; }
-  .drop {
-    border: 2px dashed #9ab; border-radius: 6px; padding: 10px; text-align: center;
-    color: #456; cursor: pointer; line-height: 1.5;
-  }
-  .drop:hover { background: #f3f7fc; }
-  .urlrow { display: flex; gap: 4px; margin-top: 8px; }
-  .urlrow input { flex: 1; min-width: 0; padding: 4px 6px; font-size: 12px; border: 1px solid #bbb; border-radius: 4px; }
-  #layerList { margin-top: 8px; }
-  .layer {
-    display: flex; align-items: center; gap: 6px; padding: 5px 0; border-top: 1px solid #eee;
-  }
-  .layer .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .layer input[type=color] { width: 24px; height: 22px; padding: 0; border: none; background: none; cursor: pointer; }
-  #gisMsg { margin-top: 6px; color: #c01c28; font-size: 12px; min-height: 1em; }
-
-  body.dragging #map::after {
-    content: "ここにファイルをドロップ"; position: absolute; inset: 0; z-index: 2000;
-    display: flex; align-items: center; justify-content: center;
-    background: rgba(26,95,180,.25); color: #fff; font-size: 28px; font-weight: bold;
-    text-shadow: 0 1px 4px rgba(0,0,0,.6);
-  }
-
-  .info {
-    background: rgba(255,255,255,.9); padding: 4px 8px; border-radius: 4px;
-    font-size: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.3);
-  }
-  .crosshair {
-    position: absolute; top: 50%; left: 50%; z-index: 900; pointer-events: none;
-    width: 24px; height: 24px; margin: -12px 0 0 -12px;
-  }
-  .crosshair::before, .crosshair::after { content: ""; position: absolute; background: #d00; }
-  .crosshair::before { left: 11px; top: 0; width: 2px; height: 24px; }
-  .crosshair::after  { top: 11px; left: 0; height: 2px; width: 24px; }
-
-  .popup-table { border-collapse: collapse; font-size: 12px; }
-  .popup-table th, .popup-table td { border: 1px solid #ddd; padding: 2px 6px; text-align: left; vertical-align: top; }
-  .popup-table th { background: #f4f6f8; white-space: nowrap; }
-  .leaflet-popup-content { max-height: 260px; overflow-y: auto; }
-
-  /* 現在地マーカー（脈打つ青い点） */
-  .me-dot {
-    width: 16px; height: 16px; border-radius: 50%; background: #1a73e8;
-    border: 3px solid #fff; box-shadow: 0 0 4px rgba(0,0,0,.5); box-sizing: border-box;
-    position: relative;
-  }
-  .me-dot::after {
-    content: ""; position: absolute; inset: -9px; border-radius: 50%;
-    background: rgba(26,115,232,.35); animation: pulse 1.8s ease-out infinite;
-  }
-  @keyframes pulse { from { transform: scale(.4); opacity: 1; } to { transform: scale(1.4); opacity: 0; } }
-
-  @media (max-width: 600px) {
-    .panel { left: 50px; right: 10px; }
-    .panel input[type=search] { width: auto; flex: 1; min-width: 0; }
-    #results { left: 10px; right: 10px; width: auto; }
-    #gisPanel { width: auto; right: 10px; }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP",Meiryo,sans-serif;color:var(--ink);background:var(--bg)}
+  #app{display:flex;height:100%}
+  #map{flex:1;min-width:0}
+  #panel{width:360px;max-width:100%;background:var(--bg);border-left:1px solid var(--line);display:flex;flex-direction:column;overflow:auto}
+  header{background:var(--green);color:#fff;padding:14px 18px}
+  header h1{font-size:17px;margin:0 0 2px;letter-spacing:.04em}
+  header p{margin:0;font-size:12px;opacity:.85}
+  .sec{padding:14px 18px;border-bottom:1px solid var(--line)}
+  .sec h2{font-size:13px;margin:0 0 8px;color:var(--muted);font-weight:600;letter-spacing:.05em}
+  .score{display:flex;gap:8px}
+  .score div{flex:1;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center}
+  .score b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+  .score span{font-size:11px;color:var(--muted)}
+  .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card)}
+  .seg button{border:0;background:none;padding:7px 10px;font:inherit;font-size:13px;cursor:pointer;color:var(--ink)}
+  .seg button.on{background:var(--green);color:#fff}
+  .btn{border:1px solid var(--green);background:var(--card);color:var(--green);border-radius:8px;padding:7px 12px;font:inherit;font-size:13px;cursor:pointer}
+  .btn.primary{background:var(--green);color:#fff}
+  .btn:disabled{opacity:.45;cursor:default}
+  .btn.small{padding:5px 9px;font-size:12px}
+  #quiz .empty{color:var(--muted);font-size:14px;line-height:1.7;background:var(--card);border:1px dashed var(--line);border-radius:10px;padding:16px}
+  .qcard{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .qhead{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .qid{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+  .tag{font-size:12px;padding:3px 8px;border-radius:999px;color:#fff}
+  .tag.gai{background:var(--gai)} .tag.hi{background:var(--hi)}
+  .hint{font-size:13px;color:var(--muted);margin:0 0 10px}
+  form label{display:block;font-size:13px;margin-bottom:4px}
+  form input{width:100%;font:inherit;font-size:17px;padding:9px 10px;border:1px solid var(--line);border-radius:8px}
+  form input:focus{outline:2px solid var(--green);border-color:var(--green)}
+  form .row{margin-top:10px}
+  .result{margin-top:12px;border-radius:8px;padding:10px 12px;font-size:15px;display:none}
+  .result.ok{display:block;background:#ebfbee;color:var(--ok);border:1px solid #b2f2bb}
+  .result.ng{display:block;background:#fff5f5;color:var(--ng);border:1px solid #ffc9c9}
+  .result b{font-size:18px}
+  .legend{background:#fff;padding:8px 10px;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.25);font-size:12px;line-height:1.8}
+  .legend i{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px;vertical-align:-1px;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.3)}
+  /* 樹木ポイント（点＋id） */
+  .tree-icon{background:none;border:0}
+  .leaflet-marker-icon.tree-icon{cursor:pointer!important}
+  .tree{display:flex;align-items:center;gap:3px;height:24px;cursor:pointer}
+  .tree .dot{flex:none;width:18px;height:18px;margin-left:3px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.45)}
+  .tree.gai .dot{background:var(--gai)}
+  .tree.hi .dot{background:var(--hi)}
+  .tree.solved .dot{border:3px solid #2b8a3e}
+  .tree.sel .dot{width:22px;height:22px;margin-left:1px;border:4px solid #ffd43b;box-shadow:0 0 0 2px #333}
+  .tree.dim{opacity:.35}
+  .tree:hover .dot{transform:scale(1.2)}
+  .tree .lbl{font-weight:700;font-size:12px;color:#111;white-space:nowrap;
+    text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 3px #fff}
+  #errbox{display:none;position:fixed;left:8px;bottom:8px;z-index:9999;background:#fff5f5;color:#c92a2a;border:1px solid #ffc9c9;border-radius:8px;padding:8px 10px;font-size:12px;max-width:90vw}
+  .history{max-height:180px;overflow:auto;font-size:13px}
+  .history div{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dotted var(--line)}
+  .history .o{color:var(--ok)} .history .x{color:var(--ng)}
+  .note{font-size:11px;color:var(--muted);line-height:1.6}
+  @media (max-width:760px){
+    #app{flex-direction:column}
+    #map{flex:none;height:55vh}
+    #panel{width:100%;border-left:0;border-top:1px solid var(--line)}
   }
 </style>
 </head>
 <body>
-<div id="map"></div>
-<div class="crosshair"></div>
+<div id="app">
+  <div id="map"></div>
+  <aside id="panel">
+    <header>
+      <h1>樹種当てクイズマップ</h1>
+      <p>熊本県林業研究・研修センター（熊本市中央区黒髪8-222-2）</p>
+    </header>
 
-<form class="panel" id="searchForm">
-  <input id="q" type="search" placeholder="地名・住所で検索（例：富士山）">
-  <button type="submit">検索</button>
-  <button type="button" class="sub" id="locateBtn" title="現在地の表示・追跡">📍 現在地</button>
-  <label style="font-size:12px;display:flex;align-items:center;gap:3px;">
-    <input type="checkbox" id="followChk" checked>追従
-  </label>
-</form>
-<div id="results"></div>
+    <div class="sec">
+      <h2>成績</h2>
+      <div class="score">
+        <div><b id="sCorrect">0</b><span>正解</span></div>
+        <div><b id="sTried">0</b><span>回答数</span></div>
+        <div><b id="sDone">0/0</b><span>正解済み樹木</span></div>
+      </div>
+    </div>
 
-<div id="gisPanel">
-  <h3 id="gisHeader"><span>GISデータ</span><span id="gisToggle">▾</span></h3>
-  <div id="gisBody">
-    <div class="drop" id="dropArea">
-      クリックで選択 / 地図にドラッグ＆ドロップ<br>
-      <small>GeoJSON・KML・KMZ・GPX・Shapefile(zip)・CSV</small>
+    <div class="sec">
+      <h2>出題範囲</h2>
+      <div class="row">
+        <div class="seg" id="filter">
+          <button data-f="all" class="on">すべて</button>
+          <button data-f="gai">農業鑑定 該当</button>
+          <button data-f="hi">非該当</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn small" id="randomBtn">ランダムに出題</button>
+        <button class="btn small" id="nextBtn">未正解の次の木へ</button>
+        <button class="btn small" id="resetBtn">成績リセット</button>
+      </div>
     </div>
-    <input type="file" id="fileInput" multiple
-           accept=".geojson,.json,.kml,.kmz,.gpx,.zip,.csv,.txt" hidden>
-    <div class="urlrow">
-      <input id="urlInput" type="url" placeholder="GeoJSON等のURLを読み込む">
-      <button class="small" id="urlBtn">読込</button>
+
+    <div class="sec" id="quiz">
+      <h2>クイズ</h2>
+      <div class="empty">地図上のポイントをクリックすると、その木の樹種名を答えるクイズが始まります。</div>
     </div>
-    <div id="gisMsg"></div>
-    <div id="layerList"></div>
-  </div>
+
+    <div class="sec">
+      <h2>回答履歴</h2>
+      <div class="history" id="history"><span class="note">まだ回答はありません。</span></div>
+    </div>
+
+    <div class="sec note">
+      樹種名はカタカナで、属性と完全に同じ文字のときだけ正解になります（ひらがな・半角カナは不正解）。<br>
+      背景地図：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>
+    </div>
+  </aside>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js"></script>
-<script src="https://unpkg.com/shpjs@4.0.4/dist/shp.js"></script>
-<script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+<div id="errbox"></div>
 <script>
-/* ================= 地理院タイル ================= */
-const ATTR = '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">地理院タイル</a>';
-const gsi = (id, ext, opt = {}) =>
-  L.tileLayer(`https://cyberjapandata.gsi.go.jp/xyz/${id}/{z}/{x}/{y}.${ext}`, {
-    attribution: ATTR, maxNativeZoom: 18, maxZoom: 20, ...opt
+  // エラーが起きたら画面左下に表示（不具合の原因調査用）
+  window.addEventListener('error', e => {
+    const b = document.getElementById('errbox');
+    b.style.display = 'block';
+    b.textContent = 'エラー: ' + e.message + (e.lineno ? '（' + e.lineno + '行目）' : '');
   });
-
-const baseLayers = {
-  "標準地図": gsi("std", "png"),
-  "淡色地図": gsi("pale", "png"),
-  "白地図":   gsi("blank", "png", { maxNativeZoom: 14 }),
-  "写真":     gsi("seamlessphoto", "jpg"),
-  "English":  gsi("english", "png", { minZoom: 5, maxNativeZoom: 11 })
-};
-const overlays = {
-  "陰影起伏図": gsi("hillshademap", "png", { opacity: 0.5, maxNativeZoom: 16 }),
-  "色別標高図": gsi("relief", "png", { opacity: 0.5, maxNativeZoom: 15 }),
-  "傾斜量図":   gsi("slopemap", "png", { opacity: 0.5, maxNativeZoom: 15 })
-};
-
-const map = L.map("map", {
-  center: [35.681236, 139.767125], zoom: 13,
-  layers: [baseLayers["標準地図"]]
-});
-const layerControl = L.control.layers(baseLayers, overlays, { collapsed: window.innerWidth < 600 }).addTo(map);
-L.control.scale({ imperial: false, position: "bottomright" }).addTo(map);
-
-/* 中心座標表示 */
-const Info = L.Control.extend({
-  options: { position: "bottomright" },
-  onAdd() { this._div = L.DomUtil.create("div", "info"); return this._div; },
-  update() {
-    const c = map.getCenter();
-    this._div.textContent = `中心: ${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}  ズーム: ${map.getZoom()}`;
+</script>
+<script>
+const TREES = {"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"id": 0, "name": "ヒサカキ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7388213, 32.8247835]}}, {"type": "Feature", "properties": {"id": 1, "name": "ヤブツバキ", "kantei": true, "family": "ツバキ科"}, "geometry": {"type": "Point", "coordinates": [130.7388464, 32.8247873]}}, {"type": "Feature", "properties": {"id": 2, "name": "クロガネモチ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7389387, 32.824805]}}, {"type": "Feature", "properties": {"id": 3, "name": "ソテツ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7390487, 32.8248333]}}, {"type": "Feature", "properties": {"id": 4, "name": "イヌツゲ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7394184, 32.8250703]}}, {"type": "Feature", "properties": {"id": 5, "name": "ハマヒサカキ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7394741, 32.8251276]}}, {"type": "Feature", "properties": {"id": 6, "name": "ケヤキ", "kantei": true, "family": "ニレ科"}, "geometry": {"type": "Point", "coordinates": [130.7395387, 32.8251824]}}, {"type": "Feature", "properties": {"id": 7, "name": "フジ", "kantei": true, "family": "マメ科"}, "geometry": {"type": "Point", "coordinates": [130.7396356, 32.8252895]}}, {"type": "Feature", "properties": {"id": 8, "name": "サルトリイバラ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7396855, 32.8253418]}}, {"type": "Feature", "properties": {"id": 9, "name": "アラカシ", "kantei": true, "family": "ブナ科"}, "geometry": {"type": "Point", "coordinates": [130.7398264, 32.8254825]}}, {"type": "Feature", "properties": {"id": 10, "name": "コウヨウザン", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7399072, 32.8255349]}}, {"type": "Feature", "properties": {"id": 11, "name": "カキ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7399071, 32.8255647]}}, {"type": "Feature", "properties": {"id": 12, "name": "ヤマハギ", "kantei": true, "family": "マメ科"}, "geometry": {"type": "Point", "coordinates": [130.7397715, 32.8256179]}}, {"type": "Feature", "properties": {"id": 13, "name": "エゴノキ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.739748, 32.8256166]}}, {"type": "Feature", "properties": {"id": 14, "name": "コナラ", "kantei": true, "family": "ブナ科"}, "geometry": {"type": "Point", "coordinates": [130.7396464, 32.8256164]}}, {"type": "Feature", "properties": {"id": 15, "name": "ハゼノキ", "kantei": true, "family": "ウルシ科"}, "geometry": {"type": "Point", "coordinates": [130.7396376, 32.825594]}}, {"type": "Feature", "properties": {"id": 16, "name": "シモクレン", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7396686, 32.8255841]}}, {"type": "Feature", "properties": {"id": 17, "name": "ヤツデ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.739617, 32.8255915]}}, {"type": "Feature", "properties": {"id": 18, "name": "ヒノキ", "kantei": true, "family": "ヒノキ科"}, "geometry": {"type": "Point", "coordinates": [130.7395876, 32.8255914]}}, {"type": "Feature", "properties": {"id": 19, "name": "クスノキ", "kantei": true, "family": "クスノキ科"}, "geometry": {"type": "Point", "coordinates": [130.7395133, 32.8255838]}}, {"type": "Feature", "properties": {"id": 20, "name": "ヤマハギ", "kantei": true, "family": "マメ科"}, "geometry": {"type": "Point", "coordinates": [130.7395038, 32.8255639]}}, {"type": "Feature", "properties": {"id": 21, "name": "イヌビワ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7394332, 32.8255376]}}, {"type": "Feature", "properties": {"id": 22, "name": "モクレン", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7394766, 32.8255303]}}, {"type": "Feature", "properties": {"id": 23, "name": "フウ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7393758, 32.8255158]}}, {"type": "Feature", "properties": {"id": 24, "name": "クスノキ", "kantei": true, "family": "クスノキ科"}, "geometry": {"type": "Point", "coordinates": [130.7393171, 32.8254641]}}, {"type": "Feature", "properties": {"id": 25, "name": "エノキ", "kantei": true, "family": "アサ科"}, "geometry": {"type": "Point", "coordinates": [130.7392576, 32.8254229]}}, {"type": "Feature", "properties": {"id": 26, "name": "アカメガシワ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7392614, 32.8253956]}}, {"type": "Feature", "properties": {"id": 27, "name": "イヌビワ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7392747, 32.8253757]}}, {"type": "Feature", "properties": {"id": 28, "name": "エノキ", "kantei": true, "family": "アサ科"}, "geometry": {"type": "Point", "coordinates": [130.739285, 32.8253869]}}, {"type": "Feature", "properties": {"id": 29, "name": "ネジキ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7392659, 32.8253596]}}, {"type": "Feature", "properties": {"id": 30, "name": "ネズミモチ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7393399, 32.8254815]}}, {"type": "Feature", "properties": {"id": 31, "name": "ヌルデ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7392726, 32.8253409]}}, {"type": "Feature", "properties": {"id": 32, "name": "ヤマハギ", "kantei": true, "family": "マメ科"}, "geometry": {"type": "Point", "coordinates": [130.7390961, 32.8252996]}}, {"type": "Feature", "properties": {"id": 33, "name": "ハゼノキ", "kantei": true, "family": "ウルシ科"}, "geometry": {"type": "Point", "coordinates": [130.7390217, 32.8253193]}}, {"type": "Feature", "properties": {"id": 34, "name": "イヌマキ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7390859, 32.8250149]}}, {"type": "Feature", "properties": {"id": 35, "name": "ヤブツバキ", "kantei": true, "family": "ツバキ科"}, "geometry": {"type": "Point", "coordinates": [130.7390631, 32.8250093]}}, {"type": "Feature", "properties": {"id": 36, "name": "ウメ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7390182, 32.8249937]}}, {"type": "Feature", "properties": {"id": 37, "name": "アジサイ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7388285, 32.8249404]}}, {"type": "Feature", "properties": {"id": 38, "name": "カンレンボク", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7387477, 32.8246383]}}, {"type": "Feature", "properties": {"id": 39, "name": "ヒヨクヒバ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7387911, 32.8246247]}}, {"type": "Feature", "properties": {"id": 40, "name": "センダン", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7388225, 32.8244651]}}, {"type": "Feature", "properties": {"id": 41, "name": "イスノキ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7388094, 32.8244327]}}, {"type": "Feature", "properties": {"id": 42, "name": "イチイガシ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7386391, 32.8242751]}}, {"type": "Feature", "properties": {"id": 43, "name": "スギ", "kantei": true, "family": "ヒノキ科"}, "geometry": {"type": "Point", "coordinates": [130.7387026, 32.8242107]}}, {"type": "Feature", "properties": {"id": 44, "name": "ウラジロガシ", "kantei": true, "family": "ブナ科"}, "geometry": {"type": "Point", "coordinates": [130.73862, 32.8242471]}}, {"type": "Feature", "properties": {"id": 45, "name": "アオキ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7386717, 32.8242031]}}, {"type": "Feature", "properties": {"id": 46, "name": "ヤエクチナシ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7386613, 32.824228]}}, {"type": "Feature", "properties": {"id": 47, "name": "ナナミノキ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7386987, 32.8240317]}}, {"type": "Feature", "properties": {"id": 48, "name": "ツゲ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7386664, 32.8239956]}}, {"type": "Feature", "properties": {"id": 49, "name": "イロハモミジ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7387165, 32.8239721]}}, {"type": "Feature", "properties": {"id": 50, "name": "ナナミノキ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7393469, 32.8238479]}}, {"type": "Feature", "properties": {"id": 51, "name": "タイサンボク", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7395349, 32.8239601]}}, {"type": "Feature", "properties": {"id": 52, "name": "カツラ", "kantei": true, "family": "カツラ科"}, "geometry": {"type": "Point", "coordinates": [130.7391837, 32.8242837]}}, {"type": "Feature", "properties": {"id": 53, "name": "アセビ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7394, 32.8248149]}}, {"type": "Feature", "properties": {"id": 54, "name": "マテバシイ", "kantei": true, "family": "ブナ科"}, "geometry": {"type": "Point", "coordinates": [130.7394968, 32.8249394]}}, {"type": "Feature", "properties": {"id": 55, "name": "クヌギ", "kantei": true, "family": "ブナ科"}, "geometry": {"type": "Point", "coordinates": [130.7397053, 32.8251113]}}, {"type": "Feature", "properties": {"id": 56, "name": "クサギ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7381998, 32.8244892]}}, {"type": "Feature", "properties": {"id": 57, "name": "マユミ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7382088, 32.8244346]}}, {"type": "Feature", "properties": {"id": 58, "name": "コナラ", "kantei": true, "family": "ブナ科"}, "geometry": {"type": "Point", "coordinates": [130.7376142, 32.8246533]}}, {"type": "Feature", "properties": {"id": 59, "name": "アカマツ", "kantei": true, "family": "マツ科"}, "geometry": {"type": "Point", "coordinates": [130.7376773, 32.824728]}}, {"type": "Feature", "properties": {"id": 60, "name": "トベラ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7377096, 32.8247504]}}, {"type": "Feature", "properties": {"id": 61, "name": "ヒノキ", "kantei": true, "family": "ヒノキ科"}, "geometry": {"type": "Point", "coordinates": [130.7376522, 32.8247466]}}, {"type": "Feature", "properties": {"id": 62, "name": "センダン", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7376316, 32.8247652]}}, {"type": "Feature", "properties": {"id": 63, "name": "エノキ", "kantei": true, "family": "アサ科"}, "geometry": {"type": "Point", "coordinates": [130.7376931, 32.8248772]}}, {"type": "Feature", "properties": {"id": 64, "name": "ネムノキ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7376385, 32.8249106]}}, {"type": "Feature", "properties": {"id": 65, "name": "ホルトノキ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7377474, 32.8249071]}}, {"type": "Feature", "properties": {"id": 66, "name": "イチョウ", "kantei": true, "family": "イチョウ科"}, "geometry": {"type": "Point", "coordinates": [130.7377151, 32.8249095]}}, {"type": "Feature", "properties": {"id": 67, "name": "コノテガシワ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7377092, 32.8248921]}}, {"type": "Feature", "properties": {"id": 68, "name": "アキグミ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7377166, 32.8248723]}}, {"type": "Feature", "properties": {"id": 69, "name": "イヌビワ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.737474, 32.8247922]}}, {"type": "Feature", "properties": {"id": 70, "name": "ネムノキ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7378781, 32.8245147]}}, {"type": "Feature", "properties": {"id": 71, "name": "ツブラジイ", "kantei": false, "family": ""}, "geometry": {"type": "Point", "coordinates": [130.7379402, 32.8244452]}}]};
+</script>
+<script>
+(function(){
+  if (!window.L) {
+    document.getElementById('map').innerHTML =
+      '<div style="padding:24px;line-height:1.8">地図ライブラリ（Leaflet）を読み込めませんでした。<br>' +
+      'インターネットに接続した状態で、Chrome・Safari・Edge などのブラウザで開いてください。<br>' +
+      '（Claudeアプリ内のプレビューやメールの添付表示では動かないことがあります）</div>';
+    return;
   }
-});
-const info = new Info().addTo(map);
-info.update();
-map.on("move zoomend", () => info.update());
+  const CENTER = [32.82495, 130.73891]; // 熊本県林業研究・研修センター付近
+  const COLOR = { gai:'#d9480f', hi:'#1c7ed6' };
+  const ATTR = '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">地理院タイル</a>';
 
-const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+  const map = L.map('map', { center: CENTER, zoom: 18, maxZoom: 21 });
 
-/* ================= クリック地点の標高 ================= */
-map.on("click", async (e) => {
-  document.getElementById("results").style.display = "none";
-  const { lat, lng } = e.latlng;
-  const base = `緯度: ${lat.toFixed(6)}<br>経度: ${lng.toFixed(6)}`;
-  const popup = L.popup().setLatLng(e.latlng).setContent(`${base}<br>標高: 取得中…`).openOn(map);
-  try {
-    const r = await fetch(`https://cyberjapandata2.gsi.go.jp/general/dem/scripts/getelevation.php?lon=${lng}&lat=${lat}&outtype=JSON`);
-    const d = await r.json();
-    const elev = (d.elevation === "-----") ? "データなし" : `${d.elevation} m（${esc(d.hsrc)}）`;
-    popup.setContent(`${base}<br>標高: ${elev}`);
-  } catch {
-    popup.setContent(`${base}<br>標高: 取得できませんでした`);
-  }
-});
-
-/* ================= 地名検索 ================= */
-const results = document.getElementById("results");
-let searchMarker = null;
-document.getElementById("searchForm").addEventListener("submit", async (ev) => {
-  ev.preventDefault();
-  const q = document.getElementById("q").value.trim();
-  if (!q) return;
-  results.style.display = "block";
-  results.innerHTML = "<div>検索中…</div>";
-  try {
-    const r = await fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(q)}`);
-    const list = await r.json();
-    if (!list.length) { results.innerHTML = "<div>見つかりませんでした</div>"; return; }
-    results.innerHTML = "";
-    list.slice(0, 30).forEach(f => {
-      const [lng, lat] = f.geometry.coordinates;
-      const row = document.createElement("div");
-      row.textContent = f.properties.title;
-      row.onclick = () => {
-        map.setView([lat, lng], 16);
-        if (searchMarker) searchMarker.remove();
-        searchMarker = L.marker([lat, lng]).addTo(map).bindPopup(esc(f.properties.title)).openPopup();
-        results.style.display = "none";
-      };
-      results.appendChild(row);
-    });
-  } catch {
-    results.innerHTML = "<div>検索に失敗しました</div>";
-  }
-});
-
-/* ================= 現在地の表示・追跡 ================= */
-const locateBtn = document.getElementById("locateBtn");
-const followChk = document.getElementById("followChk");
-let watchId = null, meMarker = null, meCircle = null, firstFix = true;
-
-function stopTracking() {
-  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-  watchId = null;
-  meMarker?.remove(); meCircle?.remove();
-  meMarker = meCircle = null;
-  locateBtn.classList.remove("on");
-  locateBtn.textContent = "📍 現在地";
-}
-
-function startTracking() {
-  if (!navigator.geolocation) { showMsg("このブラウザは位置情報に対応していません"); return; }
-  firstFix = true;
-  locateBtn.classList.add("on");
-  locateBtn.textContent = "📍 取得中…";
-  watchId = navigator.geolocation.watchPosition(onPosition, onPosError,
-    { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
-}
-
-function onPosition(pos) {
-  const { latitude: lat, longitude: lng, accuracy, altitude } = pos.coords;
-  const ll = [lat, lng];
-  const txt = `<b>現在地</b><br>緯度: ${lat.toFixed(6)}<br>経度: ${lng.toFixed(6)}` +
-              `<br>精度: 約${Math.round(accuracy)} m` +
-              (altitude != null ? `<br>GPS高度: ${altitude.toFixed(1)} m` : "") +
-              `<br><small>${new Date(pos.timestamp).toLocaleTimeString()}</small>`;
-  if (!meMarker) {
-    meCircle = L.circle(ll, { radius: accuracy, color: "#1a73e8", weight: 1, fillOpacity: 0.12, interactive: false }).addTo(map);
-    meMarker = L.marker(ll, {
-      icon: L.divIcon({ className: "", html: '<div class="me-dot"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }),
-      zIndexOffset: 1000
-    }).addTo(map).bindPopup(txt);
-  } else {
-    meMarker.setLatLng(ll).setPopupContent(txt);
-    meCircle.setLatLng(ll).setRadius(accuracy);
-  }
-  locateBtn.textContent = "📍 現在地 ON";
-  if (firstFix) {
-    map.setView(ll, Math.max(map.getZoom(), 16));
-    firstFix = false;
-  } else if (followChk.checked) {
-    map.panTo(ll);
-  }
-}
-
-function onPosError(err) {
-  const msgs = { 1: "位置情報の利用が許可されていません", 2: "現在地を特定できませんでした", 3: "位置情報の取得がタイムアウトしました" };
-  showMsg(msgs[err.code] || "位置情報を取得できませんでした");
-  stopTracking();
-}
-
-locateBtn.addEventListener("click", () => watchId === null ? startTracking() : stopTracking());
-// 地図を手で動かしたら追従を外す
-map.on("dragstart", () => { if (watchId !== null) followChk.checked = false; });
-
-/* ================= GISデータの読み込み ================= */
-const COLORS = ["#e01b24", "#2ec27e", "#9141ac", "#f5c211", "#ff7800", "#1c71d8", "#865e3c", "#e66100"];
-let colorIdx = 0;
-const gisLayers = [];
-const gisMsg = document.getElementById("gisMsg");
-function showMsg(m) { gisMsg.textContent = m; if (m) setTimeout(() => { if (gisMsg.textContent === m) gisMsg.textContent = ""; }, 6000); }
-
-function propsTable(p) {
-  if (!p) return "";
-  const rows = Object.entries(p)
-    .filter(([k, v]) => v !== null && v !== "" && typeof v !== "object")
-    .map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join("");
-  return rows ? `<table class="popup-table">${rows}</table>` : "<i>属性なし</i>";
-}
-
-function addGeoJSON(geojson, name) {
-  const color = COLORS[colorIdx++ % COLORS.length];
-  const style = { color, weight: 3, opacity: 0.9, fillColor: color, fillOpacity: 0.3 };
-  const layer = L.geoJSON(geojson, {
-    style: () => style,
-    pointToLayer: (f, ll) => L.circleMarker(ll, { ...style, radius: 6, fillOpacity: 0.8, color: "#fff", weight: 1.5, fillColor: color }),
-    onEachFeature: (f, l) => {
-      const title = f.properties?.name || f.properties?.名称 || f.properties?.title;
-      l.bindPopup((title ? `<b>${esc(title)}</b><br>` : "") + propsTable(f.properties));
-    }
-  }).addTo(map);
-
-  const count = layer.getLayers().length;
-  if (!count) { layer.remove(); showMsg(`${name}: 表示できる地物がありませんでした`); return; }
-
-  const entry = { name, layer, color };
-  gisLayers.push(entry);
-  layerControl.addOverlay(layer, esc(name));
-  renderLayerList();
-  try { map.fitBounds(layer.getBounds(), { padding: [30, 30], maxZoom: 17 }); } catch {}
-  showMsg("");
-}
-
-function renderLayerList() {
-  const box = document.getElementById("layerList");
-  box.innerHTML = "";
-  gisLayers.forEach((e, i) => {
-    const row = document.createElement("div");
-    row.className = "layer";
-    row.innerHTML = `
-      <input type="checkbox" ${map.hasLayer(e.layer) ? "checked" : ""} title="表示/非表示">
-      <input type="color" value="${e.color}" title="色を変更">
-      <span class="name" title="${esc(e.name)}">${esc(e.name)} <small>(${e.layer.getLayers().length})</small></span>
-      <button class="small sub" title="範囲へ移動">⤢</button>
-      <button class="small sub" title="削除">✕</button>`;
-    const [chk, col, , zoomBtn, delBtn] = row.children;
-    chk.onchange = () => chk.checked ? e.layer.addTo(map) : e.layer.remove();
-    col.oninput = () => {
-      e.color = col.value;
-      e.layer.eachLayer(l => {
-        if (l instanceof L.CircleMarker) l.setStyle({ fillColor: col.value });
-        else l.setStyle({ color: col.value, fillColor: col.value });
-      });
-    };
-    zoomBtn.onclick = () => map.fitBounds(e.layer.getBounds(), { padding: [30, 30], maxZoom: 17 });
-    delBtn.onclick = () => {
-      e.layer.remove();
-      layerControl.removeLayer(e.layer);
-      gisLayers.splice(i, 1);
-      renderLayerList();
-    };
-    box.appendChild(row);
-  });
-}
-// レイヤーコントロール側でON/OFFしたときにチェックを同期
-map.on("overlayadd overlayremove", renderLayerList);
-
-/* --- 形式ごとの変換 --- */
-function parseXML(text) { return new DOMParser().parseFromString(text, "text/xml"); }
-
-function csvToGeoJSON(text) {
-  const lines = text.replace(/^﻿/, "").split(/\r?\n/).filter(l => l.trim());
-  const split = l => {               // ダブルクォート対応の簡易CSVパーサ
-    const out = []; let cur = "", q = false;
-    for (let i = 0; i < l.length; i++) {
-      const c = l[i];
-      if (q) { if (c === '"' && l[i+1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; }
-      else if (c === '"') q = true;
-      else if (c === "," || c === "\t") { out.push(cur); cur = ""; }
-      else cur += c;
-    }
-    out.push(cur); return out.map(s => s.trim());
+  const base = {
+    '標準地図': L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {attribution:ATTR, maxNativeZoom:18, maxZoom:21}),
+    '淡色地図': L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', {attribution:ATTR, maxNativeZoom:18, maxZoom:21}),
+    '写真':     L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', {attribution:ATTR, maxNativeZoom:18, maxZoom:21})
   };
-  const head = split(lines[0]);
-  const find = re => head.findIndex(h => re.test(h));
-  const iLat = find(/^(lat|latitude|緯度|y)$/i);
-  const iLng = find(/^(lon|lng|long|longitude|経度|x)$/i);
-  if (iLat < 0 || iLng < 0) throw new Error("CSVに緯度・経度の列（lat/lon、緯度/経度 など）が見つかりません");
-  const features = [];
-  for (const l of lines.slice(1)) {
-    const v = split(l);
-    const lat = parseFloat(v[iLat]), lng = parseFloat(v[iLng]);
-    if (!isFinite(lat) || !isFinite(lng)) continue;
-    const props = {}; head.forEach((h, i) => props[h] = v[i]);
-    features.push({ type: "Feature", properties: props, geometry: { type: "Point", coordinates: [lng, lat] } });
-  }
-  return { type: "FeatureCollection", features };
-}
+  base['写真'].addTo(map);
+  L.control.layers(base, null, {collapsed:false}).addTo(map);
+  L.control.scale({imperial:false}).addTo(map);
 
-async function loadFile(file) {
-  const name = file.name;
-  const ext = name.split(".").pop().toLowerCase();
-  try {
-    let gj;
-    if (ext === "geojson" || ext === "json") {
-      gj = JSON.parse(await file.text());
-    } else if (ext === "kml") {
-      gj = toGeoJSON.kml(parseXML(await file.text()));
-    } else if (ext === "gpx") {
-      gj = toGeoJSON.gpx(parseXML(await file.text()));
-    } else if (ext === "kmz") {
-      const zip = await JSZip.loadAsync(await file.arrayBuffer());
-      const kmlFile = Object.values(zip.files).find(f => f.name.toLowerCase().endsWith(".kml"));
-      if (!kmlFile) throw new Error("KMZ内にKMLが見つかりません");
-      gj = toGeoJSON.kml(parseXML(await kmlFile.async("text")));
-    } else if (ext === "zip") {
-      gj = await shp(await file.arrayBuffer());  // .prj があれば緯度経度へ自動変換
-      if (Array.isArray(gj)) {                    // zip内に複数のシェープがある場合
-        gj.forEach(g => addGeoJSON(g, `${name} / ${g.fileName || ""}`));
-        return;
-      }
-    } else if (ext === "csv" || ext === "txt") {
-      gj = csvToGeoJSON(await file.text());
+  // 凡例
+  const legend = L.control({position:'bottomleft'});
+  legend.onAdd = () => {
+    const d = L.DomUtil.create('div','legend');
+    d.innerHTML = '<b>農業鑑定</b><br>'+
+      '<i style="background:'+COLOR.gai+'"></i>該当<br>'+
+      '<i style="background:'+COLOR.hi+'"></i>非該当<br>'+
+      '<i style="background:#fff;box-shadow:0 0 0 3px #2b8a3e"></i>正解済み';
+    return d;
+  };
+  legend.addTo(map);
+
+  // 状態
+  const state = { tried:0, correct:0, solved:new Set(), history:[], current:null, filter:'all' };
+  const layers = {}; // id -> circleMarker
+  const feats = TREES.features.map(f => ({...f.properties, latlng:[f.geometry.coordinates[1], f.geometry.coordinates[0]]}));
+  const byId = Object.fromEntries(feats.map(t => [t.id, t]));
+
+  function inFilter(t){
+    return state.filter==='all' || (state.filter==='gai' ? t.kantei : !t.kantei);
+  }
+  function classFor(t){
+    return 'tree ' + (t.kantei ? 'gai' : 'hi') +
+      (state.current === t.id ? ' sel' : '') +
+      (state.solved.has(t.id) ? ' solved' : '') +
+      (inFilter(t) ? '' : ' dim');
+  }
+  // 点とidラベルを1つのアイコンにする（どちらを押しても選択できる）
+  function iconFor(t){
+    return L.divIcon({
+      className: 'tree-icon',
+      html: '<div class="'+classFor(t)+'"><span class="dot"></span><span class="lbl">'+t.id+'</span></div>',
+      iconSize: [44, 24], iconAnchor: [12, 12]
+    });
+  }
+  function refreshStyles(){
+    feats.forEach(t => {
+      layers[t.id].setIcon(iconFor(t));
+      layers[t.id].setZIndexOffset(state.current === t.id ? 1000 : 0);
+    });
+  }
+
+  feats.forEach(t => {
+    const m = L.marker(t.latlng, {icon: iconFor(t), keyboard:false, riseOnHover:true}).addTo(map);
+    m.on('click', e => { L.DomEvent.stopPropagation(e); select(t.id); });
+    layers[t.id] = m;
+  });
+  map.fitBounds(L.latLngBounds(feats.map(t => t.latlng)), {padding:[30,30], maxZoom:19});
+
+  // 念のため：地図をクリックしたら一番近いポイント（30px以内）を選ぶ
+  map.on('click', e => {
+    let best = null, bestD = 30;
+    feats.forEach(t => {
+      const d = map.latLngToContainerPoint(t.latlng).distanceTo(e.containerPoint);
+      if (d < bestD) { bestD = d; best = t; }
+    });
+    if (best) select(best.id);
+  });
+
+  // 判定：属性の樹種名と完全一致（入力の前後にうっかり入った空白だけは除く）
+  function norm(s){ return (s||'').trim(); }
+
+  const quiz = document.getElementById('quiz');
+
+  function select(id){
+    state.current = id;
+    const t = byId[id];
+    refreshStyles();
+    const solved = state.solved.has(id);
+    quiz.innerHTML = `
+      <h2>クイズ</h2>
+      <div class="qcard">
+        <div class="qhead">
+          <span class="qid">No. ${t.id}</span>
+          <span class="tag ${t.kantei?'gai':'hi'}">農業鑑定 ${t.kantei?'該当':'非該当'}</span>
+        </div>
+        <p class="hint">${t.family ? 'ヒント：科名は <button type="button" class="btn small" id="famBtn">表示する</button>' : 'この木の樹種名は？'}</p>
+        <form id="qform" autocomplete="off">
+          <label for="ans">樹種名をカタカナで入力してください</label>
+          <input id="ans" name="ans" placeholder="例：クスノキ" required autocapitalize="off" autocorrect="off" spellcheck="false">
+          <div class="row">
+            <button class="btn primary" type="submit">答える</button>
+            <button class="btn" type="button" id="giveup">答えを見る</button>
+          </div>
+        </form>
+        <div class="result" id="result"></div>
+        ${solved ? '<p class="note" style="margin:10px 0 0">この木はすでに正解済みです。</p>' : ''}
+      </div>`;
+    const fam = document.getElementById('famBtn');
+    if (fam) fam.onclick = () => { fam.outerHTML = '<b>'+t.family+'</b>'; };
+    const input = document.getElementById('ans');
+    if (window.matchMedia('(min-width:761px)').matches) input.focus();
+    else quiz.scrollIntoView({behavior:'smooth', block:'start'}); // スマホ：地図の下のクイズへ移動
+    document.getElementById('qform').onsubmit = e => { e.preventDefault(); answer(t, input.value); };
+    document.getElementById('giveup').onclick = () => reveal(t);
+  }
+
+  function answer(t, val){
+    if (!val.trim()) return;
+    const ok = norm(val) === norm(t.name);
+    state.tried++;
+    const res = document.getElementById('result');
+    if (ok){
+      state.correct++;
+      state.solved.add(t.id);
+      res.className = 'result ok';
+      res.innerHTML = '<b>⭕ 正解！</b><br>No.'+t.id+' は <b>'+t.name+'</b>'+(t.family?'（'+t.family+'）':'')+' です。';
     } else {
-      throw new Error("未対応の形式です");
+      res.className = 'result ng';
+      res.innerHTML = '<b>❌ 不正解</b><br>「'+escapeHtml(val)+'」ではありません。もう一度どうぞ。';
     }
-    addGeoJSON(gj, name);
-  } catch (err) {
-    console.error(err);
-    showMsg(`${name}: 読み込めませんでした（${err.message}）`);
+    state.history.unshift({id:t.id, input:val, ok});
+    updateScore(); refreshStyles();
   }
-}
 
-async function loadURL(url) {
-  try {
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const name = decodeURIComponent(url.split("/").pop().split("?")[0]) || url;
-    const blob = await r.blob();
-    await loadFile(new File([blob], /\.\w+$/.test(name) ? name : name + ".geojson"));
-  } catch (err) {
-    showMsg(`URLを読み込めませんでした（${err.message}）。相手サーバーがCORSを許可していない可能性があります`);
+  function reveal(t){
+    const res = document.getElementById('result');
+    res.className = 'result ng';
+    res.innerHTML = '正解は <b>'+t.name+'</b>'+(t.family?'（'+t.family+'）':'')+' でした。';
+    state.history.unshift({id:t.id, input:'（答えを見た）', ok:false});
+    updateScore();
   }
-}
 
-/* --- UI --- */
-const fileInput = document.getElementById("fileInput");
-document.getElementById("dropArea").onclick = () => fileInput.click();
-fileInput.onchange = () => { [...fileInput.files].forEach(loadFile); fileInput.value = ""; };
-document.getElementById("urlBtn").onclick = () => {
-  const u = document.getElementById("urlInput").value.trim();
-  if (u) loadURL(u);
-};
-document.getElementById("gisHeader").onclick = () => {
-  const p = document.getElementById("gisPanel");
-  p.classList.toggle("collapsed");
-  document.getElementById("gisToggle").textContent = p.classList.contains("collapsed") ? "▸" : "▾";
-};
+  function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-let dragDepth = 0;
-window.addEventListener("dragenter", e => { e.preventDefault(); dragDepth++; document.body.classList.add("dragging"); });
-window.addEventListener("dragleave", e => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove("dragging"); } });
-window.addEventListener("dragover", e => e.preventDefault());
-window.addEventListener("drop", e => {
-  e.preventDefault(); dragDepth = 0; document.body.classList.remove("dragging");
-  [...e.dataTransfer.files].forEach(loadFile);
-});
+  function updateScore(){
+    const pool = feats.filter(inFilter);
+    document.getElementById('sCorrect').textContent = state.correct;
+    document.getElementById('sTried').textContent = state.tried;
+    document.getElementById('sDone').textContent = pool.filter(t=>state.solved.has(t.id)).length + '/' + pool.length;
+    const h = document.getElementById('history');
+    h.innerHTML = state.history.length ? state.history.map(r =>
+      `<div><span>No.${r.id}　${escapeHtml(r.input)}</span><span class="${r.ok?'o':'x'}">${r.ok?'⭕':'❌'}</span></div>`).join('')
+      : '<span class="note">まだ回答はありません。</span>';
+  }
+
+  function goTo(id){
+    map.setView(byId[id].latlng, Math.max(map.getZoom(), 19));
+    select(id);
+  }
+
+  document.querySelectorAll('#filter button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#filter button').forEach(x => x.classList.toggle('on', x===b));
+    state.filter = b.dataset.f;
+    refreshStyles(); updateScore();
+  });
+  document.getElementById('randomBtn').onclick = () => {
+    const pool = feats.filter(t => inFilter(t) && !state.solved.has(t.id));
+    const src = pool.length ? pool : feats.filter(inFilter);
+    goTo(src[Math.floor(Math.random()*src.length)].id);
+  };
+  document.getElementById('nextBtn').onclick = () => {
+    const pool = feats.filter(t => inFilter(t) && !state.solved.has(t.id)).sort((a,b)=>a.id-b.id);
+    if (!pool.length) return;
+    const nxt = pool.find(t => state.current===null || t.id > state.current) || pool[0];
+    goTo(nxt.id);
+  };
+  document.getElementById('resetBtn').onclick = () => {
+    Object.assign(state, {tried:0, correct:0, solved:new Set(), history:[]});
+    updateScore(); refreshStyles();
+  };
+
+  updateScore();
+})();
 </script>
 </body>
 </html>
