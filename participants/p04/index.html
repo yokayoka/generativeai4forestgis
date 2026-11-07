@@ -1,44 +1,477 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Step2 能登半島地震後オルソ画像</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-  <style>
-    html, body, #map { height: 100%; margin: 0; }
-    .opacity { position: absolute; z-index: 1000; bottom: 24px; left: 10px; background: #fff;
-               padding: 6px 10px; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.3); font: 13px sans-serif; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>金沢 景観の時代変化マップ</title>
+<meta name="description" content="Leafletで金沢市の景観の時代変化（迅速図・1960年代・1970年代・最近の空中写真）を比較できるWebGIS">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1f2933;
+    --muted: #616e7c;
+    --accent: #1565c0;
+    --border: #d9e2ec;
+    --panel: rgba(255,255,255,0.96);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+    font-family: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif; }
+  #map { position: absolute; inset: 0; }
+
+  /* タイトル */
+  #title {
+    position: absolute; top: 10px; left: 56px; right: 56px; z-index: 1000;
+    pointer-events: none; text-align: center;
+  }
+  #title span {
+    display: inline-block; background: var(--panel); padding: 6px 12px; border-radius: 6px;
+    font-weight: 700; font-size: 15px; box-shadow: 0 1px 4px rgba(0,0,0,.25);
+  }
+
+  /* 操作パネル */
+  #panel {
+    position: absolute; z-index: 1000; top: 56px; right: 10px; width: 290px;
+    max-height: calc(100% - 90px); overflow-y: auto;
+    background: var(--panel); border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    font-size: 14px;
+  }
+  #panel header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 12px; border-bottom: 1px solid var(--border); font-weight: 700;
+    position: sticky; top: 0; background: var(--panel);
+  }
+  #panel .body { padding: 8px 12px 12px; }
+  #panel h3 { font-size: 13px; margin: 10px 0 4px; color: var(--muted); }
+  #panel label { display: flex; align-items: center; gap: 6px; padding: 3px 0; cursor: pointer; }
+  #panel select { font-size: 14px; padding: 2px 4px; margin-left: 24px; }
+  #panel input[type=range] { width: 100%; }
+  #panel .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  #panel button, .btn {
+    font-size: 13px; padding: 6px 10px; border: 1px solid var(--accent); border-radius: 5px;
+    background: #fff; color: var(--accent); cursor: pointer; text-decoration: none;
+  }
+  #panel button.primary { background: var(--accent); color: #fff; }
+  #togglePanel { border: none !important; padding: 2px 6px !important; font-size: 18px !important; }
+  #shareUrl { width: 100%; font-size: 12px; padding: 4px; margin-top: 6px; }
+  .note { font-size: 11px; color: var(--muted); margin: 4px 0 0; line-height: 1.4; }
+  #msg {
+    position: absolute; z-index: 1100; left: 50%; bottom: 40px; transform: translateX(-50%);
+    background: rgba(31,41,51,.9); color: #fff; padding: 8px 14px; border-radius: 6px;
+    font-size: 13px; display: none; max-width: 90%;
+  }
+  .leaflet-control-attribution { font-size: 10px; }
+
+  /* 現在地ボタン */
+  .locate-btn a { font-size: 18px; line-height: 30px !important; }
+
+  /* 文学碑マーカー */
+  .lit-icon {
+    display: flex; align-items: center; justify-content: center;
+    background: #6a1b9a; color: #fff; border: 2px solid #fff; border-radius: 4px;
+    font-size: 13px; font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,.5);
+  }
+  .lit-inline { display: inline-flex; width: 20px; height: 20px; font-size: 11px; }
+
+  /* 学校マーカーのラベル */
+  .school-label { font-size: 12px; }
+
+  /* スマートフォン */
+  @media (max-width: 600px) {
+    #title span { font-size: 13px; }
+    #panel {
+      top: auto; bottom: calc(44px + env(safe-area-inset-bottom)); left: 8px; right: 8px; width: auto; max-height: 55%;
+    }
+    #panel.collapsed .body { display: none; }
+  }
+</style>
 </head>
 <body>
-  <div id="map"></div>
-  <div class="opacity">オルソ透過率 <input id="op" type="range" min="0" max="1" step="0.05" value="1"></div>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script>
-    // 初期中心：輪島市中心部（オルソ画像の撮影範囲）
-    const map = L.map('map').setView([37.3905, 136.8990], 15);
-    const attr = '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">地理院タイル</a>';
+<div id="map"></div>
+<div id="title"><span>金沢 景観の時代変化マップ</span></div>
 
-    const std = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
-      { attribution: attr, maxZoom: 18 }).addTo(map);
-    const pale = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',
-      { attribution: attr, maxZoom: 18 });
+<div id="panel">
+  <header>
+    <span>地図の切り替え</span>
+    <button id="togglePanel" aria-label="パネルの開閉">▾</button>
+  </header>
+  <div class="body">
+    <h3>ベースマップ</h3>
+    <label><input type="radio" name="base" value="std" checked> 国土地理院 標準地図</label>
+    <label><input type="radio" name="base" value="jinsoku"> 金沢の迅速図（明治期）</label>
 
-    // 能登半島地震後のオルソ画像（2024/4/5～4/26撮影）
-    const noto = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/20240102noto_0405_0426do/{z}/{x}/{y}.png',
-      { attribution: attr, maxZoom: 18 }).addTo(map);
+    <h3>オーバーレイ（空中写真）</h3>
+    <label><input type="radio" name="overlay" value="none"> なし</label>
+    <label><input type="radio" name="overlay" value="photo1960"> 1960年代の写真</label>
+    <label><input type="radio" name="overlay" value="photo1970" checked> 1970年代の写真</label>
+    <label><input type="radio" name="overlay" value="recent"> 最近の写真（年度別）</label>
+    <select id="yearSelect" aria-label="撮影年度"></select>
+    <p class="note">年度別写真はズーム14以上で表示されます。年度ごとに撮影範囲が異なるため、写らない場所があります。</p>
 
-    L.control.layers(
-      { '標準地図': std, '淡色地図': pale },
-      { '能登半島地震後オルソ（2024/4/5～4/26）': noto },
-      { collapsed: false }
-    ).addTo(map);
-    L.control.scale({ imperial: false }).addTo(map);
+    <h3>オーバーレイの透明度：<span id="opacityVal">80</span>%（不透明度）</h3>
+    <input type="range" id="opacity" min="0" max="100" step="5" value="80">
 
-    document.getElementById('op').addEventListener('input', e => noto.setOpacity(e.target.value));
-  </script>
+    <h3>ポイント</h3>
+    <label><input type="checkbox" id="schoolChk" checked> 学校の位置（国土数値情報）</label>
+    <label><input type="checkbox" id="litChk" checked> 文学碑（<span class="lit-icon lit-inline">碑</span>）</label>
+
+    <h3>現在地</h3>
+    <div class="row">
+      <button id="locateBtn">📍 現在地を表示</button>
+    </div>
+    <p class="note">位置情報は端末内でのみ使用し、どこにも送信・保存しません。</p>
+
+    <h3>この場所を共有</h3>
+    <div class="row">
+      <button id="copyBtn" class="primary">リンクをコピー</button>
+      <a id="shareX" class="btn" target="_blank" rel="noopener">X</a>
+      <a id="shareLine" class="btn" target="_blank" rel="noopener">LINE</a>
+      <a id="shareFb" class="btn" target="_blank" rel="noopener">Facebook</a>
+      <button id="nativeShare" style="display:none">共有…</button>
+    </div>
+    <input id="shareUrl" type="text" readonly aria-label="共有リンク">
+    <p class="note">リンクには地図の中心・ズーム・表示中の地図・透明度が含まれます（現在地は含まれません）。</p>
+  </div>
+</div>
+<div id="msg"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(function () {
+  'use strict';
+
+  // ---------- 出典 ----------
+  var GSI = '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>';
+  var ATTR = {
+    std:       GSI + '（標準地図）',
+    jinsoku:   '迅速図：<a href="https://mapwarper.h-gis.jp/maps/979" target="_blank" rel="noopener">歴史的農業環境閲覧システム / H-GIS Map Warper</a>（農研機構）',
+    photo1960: GSI + '（空中写真 1961〜1969年）',
+    photo1970: GSI + '（空中写真 1974〜1978年）',
+    recent:    GSI + '（年度別空中写真）',
+    literary:  '文学碑：&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors（ODbL）',
+    school:    '学校：<a href="https://nlftp.mlit.go.jp/ksj/" target="_blank" rel="noopener">国土数値情報（学校データ）</a>（国土交通省）を加工して作成'
+  };
+
+  // ---------- 初期値 ----------
+  var DEFAULT = { lat: 36.5613, lng: 136.6562, z: 13, base: 'std', ov: 'photo1970', yr: '2024', op: 80, sc: 1, lm: 1 };
+  // 金沢周辺で配信を確認できた年度
+  var YEARS = ['2024', '2022', '2019', '2013', '2012', '2011', '2009', '2007'];
+
+  // ---------- URLハッシュから状態を復元 ----------
+  function readHash() {
+    var s = Object.assign({}, DEFAULT);
+    var h = location.hash.replace(/^#/, '');
+    if (!h) return s;
+    h.split('&').forEach(function (kv) {
+      var p = kv.split('=');
+      if (p.length !== 2) return;
+      var k = decodeURIComponent(p[0]), v = decodeURIComponent(p[1]);
+      if (k === 'lat' || k === 'lng' || k === 'z' || k === 'op' || k === 'sc' || k === 'lm') {
+        var n = parseFloat(v); if (isFinite(n)) s[k] = n;
+      } else if (k === 'base' || k === 'ov' || k === 'yr') {
+        s[k] = v;
+      }
+    });
+    if (s.base === 'blank') s.base = 'std';
+    if (['std', 'jinsoku'].indexOf(s.base) < 0) s.base = DEFAULT.base;
+    if (['none', 'photo1960', 'photo1970', 'recent'].indexOf(s.ov) < 0) s.ov = DEFAULT.ov;
+    if (YEARS.indexOf(s.yr) < 0) s.yr = DEFAULT.yr;
+    s.op = Math.min(100, Math.max(0, s.op));
+    s.z = Math.min(18, Math.max(5, Math.round(s.z)));
+    return s;
+  }
+  var state = readHash();
+
+  // ---------- 地図 ----------
+  var map = L.map('map', { center: [state.lat, state.lng], zoom: state.z, minZoom: 5, maxZoom: 18, zoomControl: true });
+  map.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>');
+
+  var bases = {
+    std: L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+      maxNativeZoom: 18, maxZoom: 18, attribution: ATTR.std }),
+    jinsoku: L.tileLayer('https://mapwarper.h-gis.jp/maps/tile/979/{z}/{x}/{y}.png', {
+      maxNativeZoom: 18, maxZoom: 18, attribution: ATTR.jinsoku })
+  };
+
+  function makeOverlay(key, year) {
+    var opt = { maxZoom: 18, opacity: state.op / 100, attribution: ATTR[key] };
+    if (key === 'photo1960') return L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/ort_old10/{z}/{x}/{y}.png', Object.assign(opt, { maxNativeZoom: 17 }));
+    if (key === 'photo1970') return L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/gazo1/{z}/{x}/{y}.jpg', Object.assign(opt, { maxNativeZoom: 17 }));
+    if (key === 'recent') {
+      opt.attribution = GSI + '（' + year + '年度 空中写真）';
+      return L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/nendophoto' + year + '/{z}/{x}/{y}.png', Object.assign(opt, { minZoom: 14, maxNativeZoom: 18 }));
+    }
+    return null;
+  }
+
+  var currentBase = null, currentOverlay = null;
+  function setBase(key) {
+    if (currentBase) map.removeLayer(currentBase);
+    currentBase = bases[key].addTo(map);
+    currentBase.bringToBack();
+    state.base = key;
+    updateShare();
+  }
+  function setOverlay(key) {
+    if (currentOverlay) map.removeLayer(currentOverlay);
+    currentOverlay = makeOverlay(key, state.yr);
+    if (currentOverlay) currentOverlay.addTo(map);
+    state.ov = key;
+    yearSelect.disabled = key !== 'recent';
+    if (key === 'recent' && map.getZoom() < 14) showMsg('年度別写真はズーム14以上で表示されます');
+    updateShare();
+  }
+
+  // ---------- 学校ポイント ----------
+  var schoolLayer = L.layerGroup();
+  var schoolAttr = false;
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function loadSchools() {
+    fetch('elem_school.csv')
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+      .then(function (text) {
+        text = text.replace(/^﻿/, '');
+        var lines = text.split(/\r?\n/).filter(function (l) { return l.trim(); });
+        var head = lines.shift().split(',');
+        var iName = head.indexOf('name'), iX = head.indexOf('x'), iY = head.indexOf('y');
+        lines.forEach(function (line) {
+          var c = line.split(',');
+          var lat = parseFloat(c[iY]), lng = parseFloat(c[iX]);
+          if (!isFinite(lat) || !isFinite(lng)) return;
+          L.circleMarker([lat, lng], {
+            radius: 6, color: '#ffffff', weight: 2, fillColor: '#e65100', fillOpacity: 0.95
+          }).bindPopup('<b>' + escapeHtml(c[iName]) + '</b>')
+            .bindTooltip(escapeHtml(c[iName]), { direction: 'top', offset: [0, -6], className: 'school-label' })
+            .addTo(schoolLayer);
+        });
+      })
+      .catch(function () {
+        showMsg('学校データを読み込めませんでした（ローカルで開く場合はWebサーバー経由で表示してください）');
+      });
+  }
+  function setSchools(on) {
+    state.sc = on ? 1 : 0;
+    if (on) {
+      schoolLayer.addTo(map);
+      if (!schoolAttr) { map.attributionControl.addAttribution(ATTR.school); schoolAttr = true; }
+    } else {
+      map.removeLayer(schoolLayer);
+      if (schoolAttr) { map.attributionControl.removeAttribution(ATTR.school); schoolAttr = false; }
+    }
+    updateShare();
+  }
+
+  // ---------- 文学碑ポイント ----------
+  var litLayer = L.layerGroup();
+  var litAttr = false;
+  var litIcon = L.divIcon({ className: 'lit-icon', html: '碑', iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -12] });
+  function loadLiterary() {
+    fetch('literary_monuments.csv')
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+      .then(function (text) {
+        text = text.replace(/^﻿/, '');
+        var lines = text.split(/\r?\n/).filter(function (l) { return l.trim(); });
+        var head = lines.shift().split(',');
+        var iName = head.indexOf('name'), iX = head.indexOf('x'), iY = head.indexOf('y'),
+            iAuth = head.indexOf('author'), iSrc = head.indexOf('source');
+        lines.forEach(function (line) {
+          var c = line.split(',');
+          var lat = parseFloat(c[iY]), lng = parseFloat(c[iX]);
+          if (!isFinite(lat) || !isFinite(lng)) return;
+          var html = '<b>' + escapeHtml(c[iName]) + '</b>';
+          if (iAuth >= 0 && c[iAuth]) html += '<br>作者：' + escapeHtml(c[iAuth]);
+          if (iSrc >= 0 && c[iSrc]) html += '<br><small>位置：' + escapeHtml(c[iSrc]) + '</small>';
+          L.marker([lat, lng], { icon: litIcon, zIndexOffset: 500 })
+            .bindPopup(html)
+            .bindTooltip(escapeHtml(c[iName]), { direction: 'top', offset: [0, -12], className: 'school-label' })
+            .addTo(litLayer);
+        });
+      })
+      .catch(function () {
+        showMsg('文学碑データを読み込めませんでした（ローカルで開く場合はWebサーバー経由で表示してください）');
+      });
+  }
+  function setLiterary(on) {
+    state.lm = on ? 1 : 0;
+    if (on) {
+      litLayer.addTo(map);
+      if (!litAttr) { map.attributionControl.addAttribution(ATTR.literary); litAttr = true; }
+    } else {
+      map.removeLayer(litLayer);
+      if (litAttr) { map.attributionControl.removeAttribution(ATTR.literary); litAttr = false; }
+    }
+    updateShare();
+  }
+
+  // ---------- 現在地 ----------
+  var locMarker = null, locCircle = null, firstFix = true, watchId = null;
+  function startLocate() {
+    if (!navigator.geolocation) { showMsg('この端末では位置情報を利用できません'); return; }
+    if (watchId !== null) {
+      if (locMarker) map.setView(locMarker.getLatLng(), Math.max(map.getZoom(), 16));
+      return;
+    }
+    firstFix = true;
+    showMsg('現在地を取得しています…');
+    watchId = navigator.geolocation.watchPosition(function (pos) {
+      var ll = [pos.coords.latitude, pos.coords.longitude], acc = pos.coords.accuracy;
+      if (!locMarker) {
+        locCircle = L.circle(ll, { radius: acc, color: '#1565c0', weight: 1, fillOpacity: 0.12, interactive: false }).addTo(map);
+        locMarker = L.circleMarker(ll, { radius: 8, color: '#fff', weight: 3, fillColor: '#1565c0', fillOpacity: 1 })
+          .bindPopup('現在地（精度 約' + Math.round(acc) + 'm）').addTo(map);
+      } else {
+        locMarker.setLatLng(ll).setPopupContent('現在地（精度 約' + Math.round(acc) + 'm）');
+        locCircle.setLatLng(ll).setRadius(acc);
+      }
+      if (firstFix) { map.setView(ll, Math.max(map.getZoom(), 16)); firstFix = false; hideMsg(); }
+    }, function (err) {
+      showMsg('現在地を取得できませんでした（' + (err.code === 1 ? '許可されていません' : err.message) + '）');
+      navigator.geolocation.clearWatch(watchId); watchId = null;
+    }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 });
+  }
+  var LocateControl = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd: function () {
+      var div = L.DomUtil.create('div', 'leaflet-bar locate-btn');
+      var a = L.DomUtil.create('a', '', div);
+      a.href = '#'; a.title = '現在地を表示'; a.setAttribute('role', 'button'); a.innerHTML = '◎';
+      L.DomEvent.on(a, 'click', function (e) { L.DomEvent.preventDefault(e); L.DomEvent.stopPropagation(e); startLocate(); });
+      return div;
+    }
+  });
+  map.addControl(new LocateControl());
+  L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map);
+
+  // ---------- 共有リンク ----------
+  function buildUrl() {
+    var c = map.getCenter();
+    var hash = 'lat=' + c.lat.toFixed(5) + '&lng=' + c.lng.toFixed(5) + '&z=' + map.getZoom() +
+      '&base=' + state.base + '&ov=' + state.ov + (state.ov === 'recent' ? '&yr=' + state.yr : '') +
+      '&op=' + state.op + '&sc=' + state.sc + '&lm=' + state.lm;
+    return location.href.split('#')[0] + '#' + hash;
+  }
+  var shareTimer = null;
+  function updateShare() {
+    clearTimeout(shareTimer);
+    shareTimer = setTimeout(function () {
+      var url = buildUrl();
+      history.replaceState(null, '', url);
+      document.getElementById('shareUrl').value = url;
+      var text = '金沢 景観の時代変化マップ';
+      var u = encodeURIComponent(url), t = encodeURIComponent(text);
+      document.getElementById('shareX').href = 'https://x.com/intent/post?text=' + t + '&url=' + u;
+      document.getElementById('shareLine').href = 'https://social-plugins.line.me/lineit/share?url=' + u;
+      document.getElementById('shareFb').href = 'https://www.facebook.com/sharer/sharer.php?u=' + u;
+    }, 150);
+  }
+  map.on('moveend zoomend', updateShare);
+  map.on('zoomend', function () {
+    if (state.ov === 'recent' && map.getZoom() < 14) showMsg('年度別写真はズーム14以上で表示されます');
+  });
+
+  document.getElementById('copyBtn').addEventListener('click', function () {
+    var url = buildUrl(), box = document.getElementById('shareUrl');
+    box.value = url;
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(url).then(function () { showMsg('リンクをコピーしました'); },
+        function () { box.select(); showMsg('リンクを選択しました。コピーしてください'); });
+    } else {
+      box.select();
+      try { document.execCommand('copy'); showMsg('リンクをコピーしました'); }
+      catch (e) { showMsg('リンクを選択しました。コピーしてください'); }
+    }
+  });
+  if (navigator.share) {
+    var ns = document.getElementById('nativeShare');
+    ns.style.display = '';
+    ns.addEventListener('click', function () {
+      navigator.share({ title: document.title, url: buildUrl() }).catch(function () {});
+    });
+  }
+
+  // ---------- メッセージ ----------
+  var msgTimer = null;
+  function showMsg(t) {
+    var m = document.getElementById('msg');
+    m.textContent = t; m.style.display = 'block';
+    clearTimeout(msgTimer); msgTimer = setTimeout(hideMsg, 3500);
+  }
+  function hideMsg() { document.getElementById('msg').style.display = 'none'; }
+
+  // ---------- UI ----------
+  var yearSelect = document.getElementById('yearSelect');
+  YEARS.forEach(function (y) {
+    var o = document.createElement('option'); o.value = y; o.textContent = y + '年度'; yearSelect.appendChild(o);
+  });
+  yearSelect.value = state.yr;
+  yearSelect.addEventListener('change', function () {
+    state.yr = yearSelect.value;
+    if (state.ov === 'recent') setOverlay('recent'); else updateShare();
+  });
+
+  document.querySelectorAll('input[name=base]').forEach(function (el) {
+    el.checked = el.value === state.base;
+    el.addEventListener('change', function () { if (el.checked) setBase(el.value); });
+  });
+  document.querySelectorAll('input[name=overlay]').forEach(function (el) {
+    el.checked = el.value === state.ov;
+    el.addEventListener('change', function () { if (el.checked) setOverlay(el.value); });
+  });
+
+  var opEl = document.getElementById('opacity'), opVal = document.getElementById('opacityVal');
+  opEl.value = state.op; opVal.textContent = state.op;
+  opEl.addEventListener('input', function () {
+    state.op = parseInt(opEl.value, 10);
+    opVal.textContent = state.op;
+    if (currentOverlay) currentOverlay.setOpacity(state.op / 100);
+    updateShare();
+  });
+
+  var schoolChk = document.getElementById('schoolChk');
+  schoolChk.checked = !!state.sc;
+  schoolChk.addEventListener('change', function () { setSchools(schoolChk.checked); });
+  var litChk = document.getElementById('litChk');
+  litChk.checked = !!state.lm;
+  litChk.addEventListener('change', function () { setLiterary(litChk.checked); });
+
+  document.getElementById('locateBtn').addEventListener('click', startLocate);
+
+  var panel = document.getElementById('panel'), tog = document.getElementById('togglePanel');
+  if (window.matchMedia('(max-width: 600px)').matches) { panel.classList.add('collapsed'); tog.textContent = '▴'; }
+  tog.addEventListener('click', function () {
+    panel.classList.toggle('collapsed');
+    tog.textContent = panel.classList.contains('collapsed') ? '▴' : '▾';
+  });
+  L.DomEvent.disableClickPropagation(panel);
+  L.DomEvent.disableScrollPropagation(panel);
+
+  // 共有リンクで開かれた場合（戻る/ハッシュ変更）にも追従
+  window.addEventListener('hashchange', function () {
+    var s = readHash();
+    if (buildUrl() === location.href) return;
+    state = s;
+    map.setView([s.lat, s.lng], s.z);
+    document.querySelector('input[name=base][value=' + s.base + ']').checked = true;
+    document.querySelector('input[name=overlay][value=' + s.ov + ']').checked = true;
+    yearSelect.value = s.yr; opEl.value = s.op; opVal.textContent = s.op; schoolChk.checked = !!s.sc; litChk.checked = !!s.lm;
+    setBase(s.base); setOverlay(s.ov); setSchools(!!s.sc); setLiterary(!!s.lm);
+  });
+
+  // ---------- 初期表示 ----------
+  setBase(state.base);
+  setOverlay(state.ov);
+  loadSchools();
+  setSchools(!!state.sc);
+  loadLiterary();
+  setLiterary(!!state.lm);
+})();
+</script>
 </body>
 </html>
