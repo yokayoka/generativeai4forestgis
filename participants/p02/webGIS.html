@@ -1,0 +1,259 @@
+
+
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0">
+<title>地理院地図 WebGIS</title>
+
+<link rel="stylesheet"
+ href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+<style>
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+}
+#map {
+  width: 100%;
+  height: 100%;
+}
+.location-button {
+  position: absolute;
+  top: 80px;
+  left: 10px;
+  z-index: 1000;
+  padding: 9px 12px;
+  background: white;
+  border: 2px solid #aaa;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.coordinate-box {
+  position: absolute;
+  bottom: 20px;
+  left: 10px;
+  z-index: 1000;
+  background: white;
+  padding: 8px 12px;
+  border-radius: 5px;
+  font-size: 13px;
+  box-shadow: 0 1px 5px #999;
+}
+</style>
+</head>
+
+<body>
+
+<div id="map"></div>
+
+<button class="location-button"
+        onclick="showCurrentLocation()">
+  ◎ 現在位置
+</button>
+
+<div class="coordinate-box" id="coordinates">
+  地図をクリックすると座標を表示します
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
+</script>
+
+<script>
+
+// 地図の初期設定
+const map = L.map('map', {
+  center: [35.85, 137.95],
+  zoom: 13
+});
+
+// 地理院標準地図
+const standard = L.tileLayer(
+  'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
+  {
+    attribution: '地理院タイル',
+    maxZoom: 18
+  }
+);
+
+// 地理院淡色地図
+const pale = L.tileLayer(
+  'https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',
+  {
+    attribution: '地理院タイル',
+    maxZoom: 18
+  }
+);
+
+// 地理院空中写真
+const photo = L.tileLayer(
+  'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',
+  {
+    attribution: '地理院タイル',
+    maxZoom: 18
+  }
+);
+
+// 標準地図を表示
+standard.addTo(map);
+
+// 背景地図切り替え
+L.control.layers({
+  "標準地図": standard,
+  "淡色地図": pale,
+  "空中写真": photo
+}).addTo(map);
+
+// 縮尺
+L.control.scale({
+  position: 'bottomright',
+  imperial: false
+}).addTo(map);
+
+
+// =====================================
+// 伊那インターチェンジの赤丸
+// =====================================
+
+const inaIC = [35.865586, 137.943231];
+
+const inaMarker = L.circleMarker(inaIC, {
+  radius: 10,
+  color: '#ffffff',
+  weight: 2,
+  fillColor: '#ff0000',
+  fillOpacity: 1
+}).addTo(map);
+
+inaMarker.bindPopup(
+  '<b>伊那インターチェンジ</b><br>' +
+  '中央自動車道<br>' +
+  '緯度: 35.865586<br>' +
+  '経度: 137.943231'
+);
+
+
+// =====================================
+// 地図クリック時の座標表示
+// =====================================
+
+map.on('click', function(e) {
+
+  const lat = e.latlng.lat.toFixed(6);
+  const lng = e.latlng.lng.toFixed(6);
+
+  document.getElementById('coordinates').innerHTML =
+    '緯度: ' + lat + '<br>経度: ' + lng;
+
+  L.popup()
+    .setLatLng(e.latlng)
+    .setContent(
+      '緯度: ' + lat +
+      '<br>経度: ' + lng
+    )
+    .openOn(map);
+});
+
+
+// =====================================
+// 現在位置の表示
+// =====================================
+
+let currentMarker = null;
+let accuracyCircle = null;
+
+function showCurrentLocation() {
+
+  if (!navigator.geolocation) {
+    alert('位置情報に対応していません。');
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+
+    function(position) {
+
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      const accuracy = position.coords.accuracy;
+
+      // 古い現在位置を削除
+      if (currentMarker) {
+        map.removeLayer(currentMarker);
+      }
+
+      if (accuracyCircle) {
+        map.removeLayer(accuracyCircle);
+      }
+
+      // 現在位置を青丸で表示
+      currentMarker = L.circleMarker(
+        [lat, lng],
+        {
+          radius: 8,
+          color: 'white',
+          weight: 2,
+          fillColor: '#007bff',
+          fillOpacity: 1
+        }
+      ).addTo(map);
+
+      // 位置精度の円
+      accuracyCircle = L.circle(
+        [lat, lng],
+        {
+          radius: accuracy,
+          color: '#007bff',
+          fillColor: '#007bff',
+          fillOpacity: 0.1,
+          weight: 1
+        }
+      ).addTo(map);
+
+      currentMarker.bindPopup(
+        '<b>現在位置</b><br>' +
+        '緯度: ' + lat.toFixed(6) +
+        '<br>経度: ' + lng.toFixed(6) +
+        '<br>推定精度: 約' +
+        Math.round(accuracy) + 'm'
+      ).openPopup();
+
+      // 現在位置へ移動
+      map.setView([lat, lng], 16);
+
+      document.getElementById('coordinates').innerHTML =
+        '現在位置<br>' +
+        '緯度: ' + lat.toFixed(6) +
+        '<br>経度: ' + lng.toFixed(6);
+    },
+
+    function(error) {
+      let message = '現在位置を取得できませんでした。';
+
+      if (error.code === 1) {
+        message = '位置情報の利用が許可されていません。';
+      } else if (error.code === 2) {
+        message = '位置情報を特定できませんでした。';
+      } else if (error.code === 3) {
+        message = '位置情報の取得がタイムアウトしました。';
+      }
+
+      alert(message);
+    },
+
+    {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0
+    }
+  );
+}
+
+</script>
+</body>
+</html>
