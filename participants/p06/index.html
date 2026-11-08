@@ -2,12 +2,282 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>p06 - 準備中</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>熊本地震 災害調査 WebGIS</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{font-family:system-ui,'Yu Gothic',Meiryo,sans-serif;color:#203148}*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0}#map{position:fixed;inset:0;width:100%;height:100%;background:#e9edf0}header{position:absolute;top:12px;left:12px;z-index:1000;background:#fffffff2;border-radius:10px;padding:10px 13px;box-shadow:0 2px 12px #0003;max-width:calc(100vw - 24px)}h1{font-size:16px;margin:0 0 3px}header small{color:#596a7d}aside{position:absolute;top:83px;left:12px;bottom:35px;z-index:1000;width:325px;max-width:calc(100vw - 24px);overflow:auto;background:#fffffff2;border-radius:11px;padding:13px 15px;box-shadow:0 2px 12px #0003}aside.collapsed{bottom:auto;height:49px;overflow:hidden}h2{font-size:14px;margin:15px 0 7px;border-bottom:1px solid #dbe1e8;padding-bottom:6px}.opt{display:flex;align-items:center;gap:8px;margin:10px 0;font-size:14px}.oprow{padding:9px 0;border-bottom:1px solid #e6ebf0}.row{display:flex;align-items:center;justify-content:space-between;gap:8px}.oprow .row label{flex:1;font-size:14px}.alpha{margin:7px 0 0 22px}.alpha .row{font-size:11px;color:#566779}input[type=range]{width:100%}input[type=text],input[type=number]{border:1px solid #aebccd;border-radius:6px;padding:8px;font-size:12px;width:100%;min-width:0}input[type=checkbox],input[type=radio]{accent-color:#1765a5}button{background:#165e9c;color:white;border:0;border-radius:7px;padding:8px 10px;cursor:pointer}button.secondary{color:#165e9c;background:#e7f0f8}button.danger{color:#9b3434;background:#fbeaea;font-size:11px;padding:5px 8px}.buttons{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}.small{font-size:12px;color:#556678;line-height:1.6}.notice{font-size:12px;padding:8px;border-left:3px solid #d49a37;background:#fff6e4;line-height:1.5}.field{margin:8px 0}.field label{display:block;font-size:12px;margin-bottom:4px}.twocol{display:grid;grid-template-columns:1fr 1fr;gap:8px}.control-title{font-weight:600}.leaflet-container{font-family:inherit}.leaflet-container img.leaflet-tile{max-width:none!important;max-height:none!important}.survey-marker{display:flex;align-items:flex-start;gap:5px;width:max-content;max-width:180px;pointer-events:auto}.survey-marker .dot{width:13px;height:13px;margin-top:3px;flex:none;background:#c83229;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 5px #0008}.survey-marker .survey-label{display:block;width:max-content;max-width:calc(10em + 14px);padding:3px 7px;border:1px solid #b52c25;border-radius:5px;background:#fffffff2;color:#94231f;font-size:12px;font-weight:700;line-height:1.4;white-space:normal;box-shadow:0 1px 5px #0003}.point-entry{display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-bottom:1px solid #e6ebf0}.point-entry button{background:#c83229;flex:0 0 27px;padding:5px 0}.point-entry .point-desc{font-size:12px;line-height:1.5;cursor:pointer}.pop-title{font-weight:bold;margin-bottom:7px}.pop-props{border-collapse:collapse;max-width:330px;font-size:12px}.pop-props th,.pop-props td{border-bottom:1px solid #ddd;padding:4px;text-align:left;vertical-align:top;overflow-wrap:anywhere}.pop-props th{color:#556;width:82px}.leaflet-control-attribution{font-size:10px!important}#status{font-size:12px;color:#455871;margin-top:8px}@media(max-width:700px){header{left:7px;top:7px;padding:8px 10px}h1{font-size:14px}aside{left:7px;top:65px;bottom:auto;max-height:57vh;width:min(325px,calc(100vw - 14px));padding:10px}aside.collapsed{height:45px;max-height:45px}}
+
+/* iPhone/スマートフォン用操作パネル：地図は常に全画面 */
+#mobileMenu,#mobileLocate,#mobileBackdrop{display:none}
+#panel{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.leaflet-popup-content{overflow-wrap:anywhere}
+.leaflet-popup-content-wrapper{max-width:min(85vw,380px)}
+@media(max-width:700px){
+ html,body,#map{height:100%;height:100dvh}
+ header{left:8px;top:calc(7px + env(safe-area-inset-top));right:8px;max-width:none;pointer-events:none;padding:9px 12px;box-shadow:0 2px 8px #0002}
+ header h1{font-size:14px;margin:0}header small{display:none}
+ #mobileMenu,#mobileLocate{display:block;position:fixed;z-index:1100;border:0;border-radius:12px;background:#145e9c;color:#fff;font-size:15px;font-weight:700;box-shadow:0 2px 10px #0004;min-height:48px;padding:11px 15px;touch-action:manipulation}
+ #mobileMenu{bottom:calc(15px + env(safe-area-inset-bottom));left:12px}
+ #mobileLocate{bottom:calc(15px + env(safe-area-inset-bottom));right:12px;background:#fff;color:#164d7b}
+ #mobileBackdrop{display:none;position:fixed;inset:0;z-index:1190;background:#0006}
+ body.panel-open #mobileBackdrop{display:block}
+ aside,aside.collapsed{position:fixed;z-index:1200;left:0;right:0;top:auto;bottom:0;max-height:none;height:min(76dvh,680px);width:100%;max-width:none;overflow-y:auto;overflow-x:hidden;display:block;border-radius:18px 18px 0 0;padding:16px 16px calc(22px + env(safe-area-inset-bottom));background:#fff;box-shadow:0 -4px 22px #0004;transform:translateY(105%);visibility:hidden;transition:transform .18s ease,visibility .18s;scrollbar-width:thin}
+ body.panel-open aside,body.panel-open aside.collapsed{transform:translateY(0);visibility:visible}
+ aside>.row:first-child{position:sticky;top:-16px;z-index:2;background:#fff;padding:4px 0 12px;border-bottom:1px solid #e5eaf0}
+ aside button{min-height:42px;font-size:14px}
+ .opt{min-height:42px}.oprow .row{min-height:40px}
+ input[type=checkbox],input[type=radio]{width:18px;height:18px;flex-shrink:0}
+ input[type=text],input[type=number],input[type=file]{font-size:16px;max-width:100%}
+ input[type=range]{min-height:30px}
+ .leaflet-bottom.leaflet-right{bottom:calc(78px + env(safe-area-inset-bottom))}
+ .leaflet-bottom.leaflet-left{bottom:calc(76px + env(safe-area-inset-bottom))}
+ .leaflet-control-zoom a{width:38px!important;height:38px!important;line-height:38px!important}
+ .leaflet-control-attribution{max-width:48vw;overflow-wrap:anywhere}
+}
+@media(min-width:701px){#togglePanel{min-width:72px}}
+@media(prefers-reduced-motion:reduce){aside{transition:none!important}}
+</style>
 </head>
 <body>
-<h1>p06</h1>
-<p>このページは準備中です。Google Drive の作業フォルダーに index.html を置くと、ここに反映されます。</p>
-<p><a href="../../">一覧へ戻る</a></p>
+<div id="map" aria-label="熊本周辺の地図"></div>
+<button type="button" id="mobileMenu" aria-controls="panel" aria-expanded="false">☰ 地図・レイヤ</button>
+<button type="button" id="mobileLocate" aria-label="現在地を表示" title="現在地を表示">◎ 現在地</button>
+<div id="mobileBackdrop" aria-hidden="true"></div>
+<header><h1>熊本地震 災害調査 WebGIS</h1><small>調査地点4か所・地図をタップして確認</small></header>
+<aside id="panel" aria-label="地図・レイヤ設定">
+<div class="row"><strong>地図レイヤ・調査地点</strong><button class="secondary" id="togglePanel" type="button">閉じる</button></div>
+<h2>背景地図</h2>
+<div class="opt"><input type="radio" id="base-std" name="base" value="std" checked><label for="base-std">地理院地図・標準地図</label></div>
+<div class="opt"><input type="radio" id="base-pale" name="base" value="pale"><label for="base-pale">地理院地図・淡色地図</label></div>
+<h2>重ね合わせ（複数選択可）</h2>
+<div id="overlays"></div>
+<h2>調査地点（4地点）</h2>
+<div class="opt"><input type="checkbox" id="showPoints" checked><label for="showPoints">調査地点を表示</label></div>
+<div id="pointList"></div>
+<div class="buttons"><button type="button" class="secondary" id="fitPoints">すべての調査地点を表示</button></div>
+<h2>GeoTIFFを読み込む</h2>
+<p class="small">位置情報を含む <code>.tif / .tiff</code> を選ぶと、現在の地図に重ねて表示します。各レイヤの表示切替・透明度調整・削除ができます。</p>
+<div class="field"><label for="geotiffFile">GeoTIFFファイル（複数選択可）</label><input id="geotiffFile" type="file" accept=".tif,.tiff,image/tiff" multiple></div>
+<div class="buttons"><button type="button" id="loadGeoTIFF">選択したGeoTIFFを追加</button></div>
+<p class="small" id="geotiffMsg" role="status">画像の色（RGB、RGBA、単バンド）に応じて描画します。日本の平面直角座標系など一部の投影法・圧縮方式のファイルは対応できない場合があります。</p>
+<p class="notice">GeoTIFFはこのブラウザ内で開きます。配布用HTMLには画像そのものは組み込まれません。共有相手にもGeoTIFFを別途渡してください。</p>
+<h2>XYZタイルを追加</h2>
+<p class="small">新しい古地図などを追加できます。URLには <code>{z}/{x}/{y}</code> が必要です。追加したタイルは表示・透明度調整・削除ができます。</p>
+<div class="field"><label for="tileName">表示名</label><input id="tileName" type="text" value="追加した地図" placeholder="例：旧版地形図（明治期）"></div>
+<div class="field"><label for="tileUrl">XYZタイルURL</label><input id="tileUrl" type="text" placeholder="https://example.com/{z}/{x}/{y}.png"></div>
+<div class="twocol"><div class="field"><label for="tileMin">最小ズーム</label><input id="tileMin" type="number" min="0" max="22" value="0"></div><div class="field"><label for="tileMax">最大ネイティブズーム</label><input id="tileMax" type="number" min="0" max="22" value="18"></div></div>
+<div class="buttons"><button id="addTile" type="button">タイルを追加</button></div>
+<p id="tileMsg" class="notice" role="status">地図がずれる場合は、追加元のタイルがXYZ形式・Webメルカトル（EPSG:3857）か確認してください。</p>
+<h2>現地調査</h2>
+<div class="buttons"><button id="where" type="button">現在地を表示</button><button class="secondary" id="home" type="button">熊本へ戻る</button></div>
+<div id="status"></div>
+<h2>出典・利用上の注意</h2>
+<p class="small">背景・地形レイヤ：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院（地理院タイル）</a>。指定の古地図：<a href="https://mapwarper.h-gis.jp/maps/512" target="_blank" rel="noopener">Map Warper 地図512</a>。追加タイルは各配信元の利用条件に従ってください。活断層図・赤色立体地図等も利用条件と出典表示をご確認ください。</p>
+<p class="small">旧版地形図はMap Warper 512を表示します。各地図のデータ範囲と配信ズームにより、表示されない場所・縮尺があります。HTML配布で共有できますが、インターネット接続が必要です。位置情報はブラウザの制約によりHTML直開きでは利用できない場合があります（特にiPhone）。</p>
+</aside>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/georaster@1.6.0/dist/georaster.browser.bundle.min.js"></script>
+<script src="https://unpkg.com/georaster-layer-for-leaflet/dist/georaster-layer-for-leaflet.min.js"></script>
+<script>
+'use strict';
+if(typeof L==='undefined'){
+ document.getElementById('status').textContent='Leafletを読み込めません。インターネット接続をご確認ください。';
+ throw new Error('Leaflet not loaded');
+}
+const map=L.map('map',{crs:L.CRS.EPSG3857,zoomControl:false,zoomSnap:1,zoomDelta:1,fadeAnimation:false,preferCanvas:false}).setView([32.83,130.87],11);
+L.control.zoom({position:'bottomright'}).addTo(map);
+L.control.scale({imperial:false,position:'bottomleft'}).addTo(map);
+map.createPane('baseTiles');map.getPane('baseTiles').style.zIndex=200;
+map.createPane('reliefTiles');map.getPane('reliefTiles').style.zIndex=310;
+map.createPane('redTiles');map.getPane('redTiles').style.zIndex=320;
+map.createPane('activeFaultTiles');map.getPane('activeFaultTiles').style.zIndex=330;
+map.createPane('historicTiles');map.getPane('historicTiles').style.zIndex=340;
+map.createPane('customTiles');map.getPane('customTiles').style.zIndex=350;
+map.createPane('geoTiffTiles');map.getPane('geoTiffTiles').style.zIndex=360;
+map.createPane('surveyPoints');map.getPane('surveyPoints').style.zIndex=650;
+const gsiAttrib='<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>';
+const oldAttrib='<a href="https://mapwarper.h-gis.jp/maps/512" target="_blank" rel="noopener">Map Warper (512)</a>';
+function tile(url, opts={}){
+ return L.tileLayer(url,{tileSize:256,zoomOffset:0,tms:false,detectRetina:false,updateWhenIdle:true,keepBuffer:3,crossOrigin:false,maxZoom:22,...opts});
+}
+const baseLayers={
+ std:tile('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{pane:'baseTiles',maxNativeZoom:18,attribution:gsiAttrib}),
+ pale:tile('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{pane:'baseTiles',maxNativeZoom:18,attribution:gsiAttrib})
+};
+baseLayers.std.addTo(map);
+const overlayBox=document.getElementById('overlays');
+const layerRecords=new Map();let customCounter=0;
+function addOverlay(cfg){
+ const id=cfg.id,wrap=document.createElement('div');wrap.className='oprow';wrap.dataset.layer=id;
+ const line=document.createElement('div');line.className='row';
+ const cb=document.createElement('input');cb.type='checkbox';cb.id='layer-'+id;cb.checked=!!cfg.checked;
+ const label=document.createElement('label');label.htmlFor=cb.id;label.textContent=cfg.name;
+ line.append(cb,label);
+ if(cfg.removable){const del=document.createElement('button');del.type='button';del.className='danger';del.textContent='削除';del.addEventListener('click',()=>{const rec=layerRecords.get(id);if(rec){map.removeLayer(rec.layer);layerRecords.delete(id)}wrap.remove();document.getElementById('tileMsg').textContent='追加したタイルを削除しました。';});line.append(del);}
+ wrap.append(line);
+ const alpha=document.createElement('div');alpha.className='alpha';const alphaLine=document.createElement('div');alphaLine.className='row';
+ const text=document.createElement('span');text.textContent='表示の濃さ';const value=document.createElement('span');value.textContent=Math.round(cfg.opacity*100)+'%';alphaLine.append(text,value);
+ const slider=document.createElement('input');slider.type='range';slider.min='0';slider.max='100';slider.step='5';slider.value=String(Math.round(cfg.opacity*100));slider.setAttribute('aria-label',cfg.name+'の表示濃さ');
+ alpha.append(alphaLine,slider);wrap.append(alpha);overlayBox.append(wrap);
+ const layer=tile(cfg.url,{pane:cfg.pane||'customTiles',minZoom:cfg.minZoom??0,maxNativeZoom:cfg.maxNativeZoom??18,opacity:cfg.opacity,attribution:cfg.attribution||cfg.name});
+ layerRecords.set(id,{layer,cb,wrap});
+ if(cfg.checked)layer.addTo(map);
+ cb.addEventListener('change',()=>{if(cb.checked){layer.addTo(map)}else{map.removeLayer(layer)}});
+ slider.addEventListener('input',()=>{layer.setOpacity(Number(slider.value)/100);value.textContent=slider.value+'%'});
+ layer.on('tileerror',()=>{if(cb.checked&&!wrap.dataset.warned){wrap.dataset.warned='1';const msg=document.createElement('div');msg.className='small';msg.textContent='一部のタイルを取得できません。配信範囲・ズーム・URLをご確認ください。';wrap.append(msg)}});
+ return layer;
+}
+addOverlay({id:'relief',name:'標高段彩図（色別標高図）',url:'https://cyberjapandata.gsi.go.jp/xyz/relief/{z}/{x}/{y}.png',pane:'reliefTiles',minZoom:5,maxNativeZoom:15,opacity:.6,checked:false,attribution:gsiAttrib});
+addOverlay({id:'red',name:'赤色立体地図',url:'https://cyberjapandata.gsi.go.jp/xyz/sekishoku/{z}/{x}/{y}.png',pane:'redTiles',minZoom:2,maxNativeZoom:14,opacity:.7,checked:false,attribution:gsiAttrib});
+addOverlay({id:'fault',name:'都市圏活断層図',url:'https://cyberjapandata.gsi.go.jp/xyz/afm/{z}/{x}/{y}.png',pane:'activeFaultTiles',minZoom:11,maxNativeZoom:16,opacity:.88,checked:true,attribution:gsiAttrib});
+addOverlay({id:'historic512',name:'古地図（Map Warper 512）',url:'https://mapwarper.h-gis.jp/maps/tile/512/{z}/{x}/{y}.png',pane:'historicTiles',minZoom:0,maxNativeZoom:18,opacity:.75,checked:true,attribution:oldAttrib});
+document.querySelectorAll('input[name="base"]').forEach(input=>input.addEventListener('change',()=>{
+ Object.values(baseLayers).forEach(layer=>map.removeLayer(layer));baseLayers[input.value].addTo(map);
+}));
+document.getElementById('addTile').addEventListener('click',()=>{
+ const url=document.getElementById('tileUrl').value.trim(),name=document.getElementById('tileName').value.trim()||'追加した地図';
+ const min=Number(document.getElementById('tileMin').value),max=Number(document.getElementById('tileMax').value),msg=document.getElementById('tileMsg');
+ if(!/^https:\/\//i.test(url)||!['{z}','{x}','{y}'].every(v=>url.includes(v))){msg.textContent='HTTPSで始まり、{z}・{x}・{y}を含むXYZ形式のURLを入力してください。';return}
+ if(!Number.isInteger(min)||!Number.isInteger(max)||min<0||max>22||min>max){msg.textContent='ズームレベルを0～22の範囲で、最小≦最大となるよう入力してください。';return}
+ customCounter++;addOverlay({id:'custom'+customCounter,name,url,pane:'customTiles',minZoom:min,maxNativeZoom:max,opacity:.75,checked:true,removable:true,attribution:name});
+ msg.textContent='「'+name+'」を追加しました。既存のタイル追加機能は引き続き利用できます。';
+ document.getElementById('tileUrl').value='';
+});
+
+
+// ファイル選択によるGeoTIFF表示（位置はGeoTIFF内部のGeoKeysを利用）
+let rasterCounter=0;
+const tiffInput=document.getElementById('geotiffFile');
+const tiffMsg=document.getElementById('geotiffMsg');
+const tiffLayers=new Map();
+function addGeoRasterControl(file,layer){
+  const id='tiff'+(++rasterCounter), wrap=document.createElement('div');
+  wrap.className='oprow';
+  const line=document.createElement('div');line.className='row';
+  const cb=document.createElement('input');cb.type='checkbox';cb.checked=true;cb.id='layer-'+id;
+  const label=document.createElement('label');label.htmlFor=cb.id;label.textContent='GeoTIFF: '+file.name;
+  const del=document.createElement('button');del.type='button';del.textContent='削除';del.className='danger';
+  line.append(cb,label,del);wrap.append(line);
+  const alpha=document.createElement('div');alpha.className='alpha';
+  const alphaLine=document.createElement('div');alphaLine.className='row';
+  const aTitle=document.createElement('span');aTitle.textContent='表示の濃さ';
+  const value=document.createElement('span');value.textContent='75%';
+  alphaLine.append(aTitle,value);
+  const slider=document.createElement('input');slider.type='range';slider.min='0';slider.max='100';slider.step='5';slider.value='75';
+  alpha.append(alphaLine,slider);wrap.append(alpha);
+  const jump=document.createElement('button');jump.className='secondary';jump.type='button';jump.textContent='この画像の範囲へ移動';
+  wrap.append(jump);
+  document.getElementById('overlays').append(wrap);
+  tiffLayers.set(id,layer);
+  cb.addEventListener('change',()=>{if(cb.checked)layer.addTo(map);else map.removeLayer(layer)});
+  slider.addEventListener('input',()=>{layer.setOpacity(Number(slider.value)/100);value.textContent=slider.value+'%'});
+  del.addEventListener('click',()=>{map.removeLayer(layer);tiffLayers.delete(id);wrap.remove()});
+  jump.addEventListener('click',()=>{const bounds=layer.getBounds();if(bounds&&bounds.isValid())map.fitBounds(bounds.pad(.08))});
+}
+function numericColor(vals,gr){
+  if(vals.every(v=>v==null||!Number.isFinite(v)))return null;
+  if(vals.some(v=>v===gr.noDataValue))return null;
+  if(vals.length>=3){
+    const norm=(v,i)=>{const min=gr.mins?.[i]??0,max=gr.maxs?.[i]??255;
+      return Math.round(Math.max(0,Math.min(255,max<=255&&min>=0?v:(v-min)/(max-min||1)*255)))};
+    const r=norm(vals[0],0),g=norm(vals[1],1),b=norm(vals[2],2);
+    const a=(vals.length>3&&Number.isFinite(vals[3]))?Math.max(0,Math.min(1,vals[3]>1?vals[3]/255:vals[3])):1;
+    return `rgba(${r},${g},${b},${a})`;
+  }
+  const min=gr.mins?.[0]??0,max=gr.maxs?.[0]??255;
+  const v=Math.round(Math.max(0,Math.min(255,(vals[0]-min)/(max-min||1)*255)));
+  return `rgb(${v},${v},${v})`;
+}
+document.getElementById('loadGeoTIFF').addEventListener('click',async()=>{
+ const files=Array.from(tiffInput.files||[]);
+ if(!files.length){tiffMsg.textContent='最初にGeoTIFFファイルを選択してください。';return;}
+ if(typeof parseGeoraster!=='function'||typeof GeoRasterLayer==='undefined'){
+   tiffMsg.textContent='GeoTIFF表示ライブラリを取得できません。インターネット接続を確認して再度開いてください。';return;
+ }
+ const btn=document.getElementById('loadGeoTIFF');btn.disabled=true;
+ let successes=0;
+ for(const f of files){
+   tiffMsg.textContent=`読み込み中：${f.name}（${Math.round(f.size/1048576)} MB）`;
+   try{
+     const gr=await parseGeoraster(f);
+     if(!gr.projection)throw new Error('座標系（EPSG）が見つかりません。GeoTIFFとして座標参照系を埋め込んでください。');
+     const raster=new GeoRasterLayer({georaster:gr,opacity:.75,resolution:128,
+       pane:'geoTiffTiles',pixelValuesToColorFn:vals=>numericColor(vals,gr)});
+     raster.addTo(map);
+     const bounds=raster.getBounds();
+     if(!bounds||!bounds.isValid())throw new Error('画像の位置情報を解釈できません。');
+     addGeoRasterControl(f,raster);map.fitBounds(bounds.pad(.08),{maxZoom:16});
+     successes++;
+   }catch(e){tiffMsg.textContent=`${f.name} の読み込みに失敗：${e.message||e}。EPSG:4326または3857に変換したGeoTIFFでお試しください。`;console.error(e);}
+ }
+ btn.disabled=false;tiffInput.value='';
+ if(successes===files.length)tiffMsg.textContent=`${successes}件のGeoTIFFを追加しました。透明度や表示切替は上の「重ね合わせ」にあります。`;
+ else if(successes)tiffMsg.textContent=`${successes}/${files.length}件を追加しました。読み込めなかった画像は座標系・ファイル形式を確認してください。`;
+});
+
+// 調査地点（配布HTMLにShapefileの座標・属性を埋め込み済み）
+const surveyPoints = [{"number":1,"lat":32.43089376726942,"lng":130.568799203114,"properties":{"id":"1","Name":"地表地震断層"}},{"number":2,"lat":32.571919936372986,"lng":130.69193922043274,"properties":{"id":"2","Name":"田んぼのずれ"}},{"number":3,"lat":32.471855818437504,"lng":130.60550019835932,"properties":{"id":"3","Name":"地表地震断層"}},{"number":4,"lat":32.63988474238269,"lng":130.74110525031205,"properties":{"id":"4","Name":"地表地震断層"}}];
+const surveyLayer=L.featureGroup().addTo(map);
+function esc(value){return String(value==null?'':value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+const pointEntries=[];
+for(const p of surveyPoints){
+ const name=p.properties.Name||'調査地点 '+p.number;
+ const pointId=String(p.properties.id??p.number);
+ const icon=L.divIcon({className:'',html:'<div class="survey-marker"><span class="dot"></span><span class="survey-label">'+esc(pointId)+'</span></div>',iconSize:[0,0],iconAnchor:[7,9],popupAnchor:[0,-12]});
+ const mk=L.marker([p.lat,p.lng],{icon,pane:'surveyPoints',title:name}).addTo(surveyLayer);
+ const popupName=Array.from(name).reduce((lines,ch,i)=>{if(i%10===0)lines.push('');lines[lines.length-1]+=ch;return lines;},[]).map(esc).join('<br>');
+ mk.bindPopup('<div class="pop-title">'+popupName+'</div>',{maxWidth:380});
+ const wrap=document.createElement('div');wrap.className='point-entry';
+ const b=document.createElement('button');b.type='button';b.textContent=p.number;b.setAttribute('aria-label','調査地点'+p.number+'へ移動');
+ const desc=document.createElement('div');desc.className='point-desc';desc.textContent=name;
+ const go=()=>{if(!map.hasLayer(surveyLayer)){surveyLayer.addTo(map);document.getElementById('showPoints').checked=true;}map.setView([p.lat,p.lng],Math.max(map.getZoom(),14));if(window.matchMedia('(max-width:700px)').matches)setMobilePanel(false);mk.openPopup();};
+ b.addEventListener('click',go);desc.addEventListener('click',go);wrap.append(b,desc);document.getElementById('pointList').append(wrap);
+ pointEntries.push(mk);
+}
+document.getElementById('showPoints').addEventListener('change',e=>{if(e.target.checked)surveyLayer.addTo(map);else map.removeLayer(surveyLayer);});
+function focusAllPoints(){if(pointEntries.length)map.fitBounds(surveyLayer.getBounds().pad(.15),{maxZoom:13,padding:[35,35]});}
+document.getElementById('fitPoints').addEventListener('click',()=>{focusAllPoints();if(window.matchMedia('(max-width:700px)').matches)setMobilePanel(false)});
+focusAllPoints();
+
+let positionMarker=null;
+document.getElementById('where').addEventListener('click',()=>{
+ const status=document.getElementById('status');status.textContent='現在地を取得しています…';
+ if(!navigator.geolocation){status.textContent='このブラウザは位置情報に対応していません。';return}
+ navigator.geolocation.getCurrentPosition(pos=>{
+ const p=[pos.coords.latitude,pos.coords.longitude];if(positionMarker)map.removeLayer(positionMarker);
+ positionMarker=L.circleMarker(p,{radius:9,color:'#fff',weight:3,fillColor:'#1665d8',fillOpacity:1}).addTo(map).bindPopup('現在地（推定精度：約'+Math.round(pos.coords.accuracy)+' m）');
+ map.setView(p,Math.max(map.getZoom(),15));positionMarker.openPopup();status.textContent='現在地を表示しました。';
+ },err=>{status.textContent='現在地を取得できませんでした：'+err.message+'（HTML直開きでは制限される場合があります）。';},{enableHighAccuracy:true,timeout:12000,maximumAge:10000});
+});
+document.getElementById('home').addEventListener('click',()=>map.setView([32.83,130.87],11));
+const panel=document.getElementById('panel');
+const mobileQuery=window.matchMedia('(max-width:700px)');
+const menuBtn=document.getElementById('mobileMenu');
+function setMobilePanel(open){
+ document.body.classList.toggle('panel-open',open);
+ menuBtn.setAttribute('aria-expanded',String(open));
+ panel.inert=mobileQuery.matches&&!open;
+ if(open){panel.classList.remove('collapsed');}
+ setTimeout(()=>map.invalidateSize(),220);
+}
+function syncLayout(){
+ if(mobileQuery.matches){panel.classList.remove('collapsed');setMobilePanel(false);}
+ else{setMobilePanel(false);panel.inert=false;document.getElementById('togglePanel').textContent=panel.classList.contains('collapsed')?'展開':'閉じる';}
+}
+menuBtn.addEventListener('click',()=>setMobilePanel(!document.body.classList.contains('panel-open')));
+document.getElementById('mobileBackdrop').addEventListener('click',()=>setMobilePanel(false));
+document.getElementById('mobileLocate').addEventListener('click',()=>document.getElementById('where').click());
+document.getElementById('togglePanel').addEventListener('click',()=>{
+ if(mobileQuery.matches){setMobilePanel(false);return;}
+ panel.classList.toggle('collapsed');
+ document.getElementById('togglePanel').textContent=panel.classList.contains('collapsed')?'展開':'閉じる';
+ setTimeout(()=>map.invalidateSize(),60);
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&mobileQuery.matches)setMobilePanel(false)});
+mobileQuery.addEventListener('change',syncLayout);
+syncLayout();
+window.addEventListener('resize',()=>map.invalidateSize());window.addEventListener('load',()=>map.invalidateSize(true));
+</script>
 </body>
 </html>
