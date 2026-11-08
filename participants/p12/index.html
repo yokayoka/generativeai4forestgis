@@ -1,13 +1,1689 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>p12 - 準備中</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>地理院地図 3D WebGIS</title>
+
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<link href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/pmtiles@4.5.0/dist/pmtiles.js"></script>
+
+<style>
+html, body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    font-family: sans-serif;
+}
+
+#header {
+    height: 50px;
+    background: #263746;
+    color: white;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 10px;
+}
+
+#controls {
+    margin-left: auto;
+    display: flex;
+    gap: 5px;
+}
+
+button {
+    padding: 7px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+button.active {
+    background: #1683c4;
+    color: white;
+}
+
+#zoomLevel {
+    font-size: 13px;
+    background: rgba(255,255,255,0.15);
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-variant-numeric: tabular-nums;
+}
+
+#exagBox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    margin-right: 10px;
+}
+
+#exagBox.disabled {
+    opacity: 0.4;
+}
+
+#exagValue {
+    width: 32px;
+    text-align: right;
+}
+
+#map {
+    width: 100%;
+    height: calc(100% - 50px);
+}
+
+/* ドロップ時のオーバーレイ */
+#dropOverlay {
+    display: none;
+    position: absolute;
+    inset: 50px 0 0 0;
+    z-index: 200;
+    background: rgba(22, 131, 196, 0.25);
+    border: 4px dashed #1683c4;
+    color: #0d4f78;
+    font-size: 22px;
+    font-weight: bold;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+#dropOverlay.show {
+    display: flex;
+}
+
+/* 軌跡一覧パネル */
+/* エラー通知 */
+#errorBox {
+    position: absolute;
+    top: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 300;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: min(520px, calc(100% - 20px));
+    pointer-events: none;
+}
+
+.errorItem {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fdecea;
+    color: #8a1c13;
+    border: 1px solid #f5c2bc;
+    border-left: 5px solid #d63031;
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.25);
+    padding: 8px 10px;
+    font-size: 13px;
+}
+
+.errorItem .msg {
+    flex: 1;
+    min-width: 0;
+}
+
+.errorItem .detail {
+    font-size: 11px;
+    color: #a2463d;
+    word-break: break-all;
+}
+
+.errorItem button {
+    padding: 3px 8px;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.errorItem .retry {
+    background: #d63031;
+    color: white;
+}
+
+.errorItem .close {
+    background: transparent;
+    color: #8a1c13;
+    font-size: 16px;
+    line-height: 1;
+    padding: 2px 6px;
+}
+
+#trackPanel {
+    position: absolute;
+    left: 10px;
+    top: 60px;
+    z-index: 100;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.3);
+    padding: 8px 10px;
+    font-size: 12px;
+    max-width: 280px;
+    max-height: 50%;
+    overflow-y: auto;
+}
+
+#trackPanel .hint {
+    color: #666;
+}
+
+.trackItem {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    border-top: 1px solid #eee;
+}
+
+.trackItem:first-of-type {
+    border-top: none;
+}
+
+/* 再生パネル */
+#playPanel {
+    position: absolute;
+    left: 50%;
+    bottom: 30px;
+    transform: translateX(-50%);
+    width: min(720px, calc(100% - 20px));
+    box-sizing: border-box;
+    z-index: 100;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.3);
+    padding: 8px 10px;
+    font-size: 12px;
+}
+
+#playPanel.hidden {
+    display: none;
+}
+
+#playPanel .row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+#playPanel button {
+    padding: 4px 10px;
+    min-width: 34px;
+}
+
+#playPanel select {
+    padding: 3px;
+    max-width: 200px;
+}
+
+#playSeek {
+    width: 100%;
+    margin: 6px 0 2px;
+}
+
+#playInfo {
+    color: #333;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 4px;
+}
+
+#profile {
+    display: block;
+    width: 100%;
+    height: 110px;
+    cursor: crosshair;
+    touch-action: none;
+}
+
+.playMarker {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ffd400;
+    border: 3px solid #263746;
+    box-shadow: 0 0 4px rgba(0,0,0,.5);
+}
+
+/* 色の選択(カラーピッカー) */
+input[type="color"] {
+    -webkit-appearance: none;
+    appearance: none;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 0;
+    cursor: pointer;
+    background: none;
+}
+input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+input[type="color"]::-webkit-color-swatch { border: none; border-radius: 3px; }
+input[type="color"]::-moz-color-swatch { border: none; border-radius: 3px; }
+
+.trackColor {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+}
+
+#trailColor {
+    width: 28px;
+    height: 28px;
+    margin-left: -2px;
+}
+
+.trackInfo {
+    flex: 1;
+    min-width: 0;
+    cursor: pointer;
+}
+
+.trackName {
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.trackItem button {
+    padding: 2px 6px;
+    font-size: 11px;
+}
+</style>
 </head>
+
 <body>
-<h1>p12</h1>
-<p>このページは準備中です。Google Drive の作業フォルダーに index.html を置くと、ここに反映されます。</p>
-<p><a href="../../">一覧へ戻る</a></p>
+
+<div id="header">
+    <strong>地理院地図 WebGIS</strong>
+    <span id="zoomLevel" title="現在のズームレベル">ZL --</span>
+    <div id="controls">
+        <div id="exagBox">
+            <label for="exagSlider">地形の強調</label>
+            <input type="range" id="exagSlider" min="1" max="5" step="0.1" value="1">
+            <span id="exagValue">1.0倍</span>
+        </div>
+        <button id="btn2d">2D</button>
+        <button id="btn3d" class="active">3D</button>
+        <button id="btnStd">標準地図</button>
+        <button id="btnPhoto" class="active">航空写真</button>
+        <button id="btnTrail" class="active" title="ズーム11以上で徒歩道(破線の道)を強調">徒歩道強調</button>
+        <input type="color" id="trailColor" value="#ff7a00" title="徒歩道の色">
+    </div>
+</div>
+
+<div id="map"></div>
+
+<div id="dropOverlay">GPXファイルをドロップしてください</div>
+
+<div id="errorBox"></div>
+
+<div id="playPanel" class="hidden">
+    <div class="row">
+        <select id="playTrack" title="再生する軌跡"></select>
+        <button id="btnPlay" title="再生 / 一時停止">▶</button>
+        <button id="btnStop" title="停止(最初に戻る)">■</button>
+        <select id="playSpeed" title="再生速度">
+            <option value="1">×1</option>
+            <option value="10">×10</option>
+            <option value="30">×30</option>
+            <option value="60">×60</option>
+            <option value="120">×120</option>
+            <option value="300" selected>×300</option>
+            <option value="600">×600</option>
+            <option value="1000">×1000</option>
+        </select>
+        <label><input type="checkbox" id="followCam" checked> 追従カメラ</label>
+    </div>
+    <input type="range" id="playSeek" min="0" max="1000" value="0" title="再生位置">
+    <div id="playInfo"></div>
+    <canvas id="profile" title="クリック・ドラッグで再生位置を移動"></canvas>
+</div>
+
+<div id="trackPanel">
+    <div class="hint" id="trackHint">GPXファイルを地図にドロップすると軌跡を表示します</div>
+    <div id="trackList"></div>
+</div>
+
+<script>
+// ---------------------------------------------
+// 地理院の標高タイル(dem_png)を MapLibre が読める
+// Terrarium 形式に変換するプロトコル
+// ---------------------------------------------
+maplibregl.addProtocol('gsidem', async (params, abortController) => {
+    const [z, x, y] = params.url.replace('gsidem://', '').split('/');
+    const url = `https://cyberjapandata.gsi.go.jp/xyz/dem_png/${z}/${x}/${y}.png`;
+
+    const canvas = new OffscreenCanvas(256, 256);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    let img = null;
+    try {
+        const res = await fetch(url, { signal: abortController.signal });
+        if (res.ok) img = await createImageBitmap(await res.blob());
+    } catch (e) {
+        if (e.name === 'AbortError') throw e;
+    }
+
+    let imageData;
+    if (img) {
+        ctx.drawImage(img, 0, 0);
+        imageData = ctx.getImageData(0, 0, 256, 256);
+    } else {
+        // 海域などタイルが無い場所は標高0mとして扱う
+        imageData = ctx.createImageData(256, 256);
+    }
+
+    const d = imageData.data;
+    for (let i = 0; i < d.length; i += 4) {
+        let h = 0;
+        if (img) {
+            const v = d[i] * 65536 + d[i + 1] * 256 + d[i + 2];
+            if (v < 8388608) h = v * 0.01;               // 正の標高
+            else if (v > 8388608) h = (v - 16777216) * 0.01; // 負の標高
+            // v === 8388608 は無効値 → 0m
+        }
+        const t = h + 32768;
+        d[i]     = Math.floor(t / 256);
+        d[i + 1] = Math.floor(t) % 256;
+        d[i + 2] = Math.floor((t - Math.floor(t)) * 256);
+        d[i + 3] = 255;
+    }
+    ctx.putImageData(imageData, 0, 0);
+
+    const blob = await canvas.convertToBlob({ type: 'image/png' });
+    return { data: await blob.arrayBuffer() };
+});
+
+// ---------------------------------------------
+// 地理院 最適化ベクトルタイル(PMTiles形式)用のプロトコル
+// ---------------------------------------------
+const PMTILES_URL = 'https://cyberjapandata.gsi.go.jp/xyz/optimal_bvmap-v1/optimal_bvmap-v1.pmtiles';
+const RETRY_DELAYS = [1000, 2000, 4000];   // 再試行の間隔(ms)。最大3回
+
+// 中断(Abort)されるまで待つ
+function sleep(ms, signal) {
+    return new Promise((resolve, reject) => {
+        if (signal && signal.aborted) return reject(new DOMException('Aborted', 'AbortError'));
+        const timer = setTimeout(resolve, ms);
+        if (signal) {
+            signal.addEventListener('abort', () => {
+                clearTimeout(timer);
+                reject(new DOMException('Aborted', 'AbortError'));
+            }, { once: true });
+        }
+    });
+}
+
+// 通信に失敗したら自動で再試行する PMTiles 用の読み込み元
+class RetryFetchSource {
+    constructor(url) {
+        this.inner = new pmtiles.FetchSource(url);
+    }
+    getKey() {
+        return this.inner.getKey();
+    }
+    async getBytes(offset, length, signal, etag) {
+        for (let attempt = 0; ; attempt++) {
+            try {
+                return await this.inner.getBytes(offset, length, signal, etag);
+            } catch (e) {
+                const canRetry = e.name !== 'AbortError'
+                    && !(e instanceof pmtiles.EtagMismatch)
+                    && attempt < RETRY_DELAYS.length;
+                if (!canRetry) throw e;
+                console.warn(`徒歩道データの読み込みに失敗しました。再試行します(${attempt + 1}/${RETRY_DELAYS.length})`, e);
+                await sleep(RETRY_DELAYS[attempt], signal);
+            }
+        }
+    }
+}
+
+const pmProtocol = new pmtiles.Protocol();
+
+// PMTiles を(作り直して)登録。失敗した読み込み結果のキャッシュも消える
+function registerPMTiles() {
+    pmProtocol.add(new pmtiles.PMTiles(new RetryFetchSource(PMTILES_URL)));
+}
+registerPMTiles();
+
+maplibregl.addProtocol('pmtiles', async (params, abortController) => {
+    try {
+        return await pmProtocol.tilev4(params, abortController);
+    } catch (e) {
+        // 再試行しても失敗した場合は、次回は最初から読み直せるよう作り直す
+        if (e.name !== 'AbortError') registerPMTiles();
+        throw e;
+    }
+});
+
+// 徒歩道の地物種別コード(通常部・橋・トンネル等)
+const TRAIL_CODES = [2721, 2722, 2723, 2724];
+const TRAIL_MINZOOM = 11;
+
+// ---------------------------------------------
+// 地図
+// ---------------------------------------------
+const map = new maplibregl.Map({
+    container: 'map',
+    center: [137.954, 35.827], // 伊那市周辺
+    zoom: 12,
+    pitch: 60,
+    maxPitch: 85,  // 3D時の傾きの上限
+    style: {
+        version: 8,
+        sources: {
+            std: {
+                type: 'raster',
+                tiles: ['https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png'],
+                tileSize: 256,
+                maxzoom: 18,
+                attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">地理院タイル</a>'
+            },
+            photo: {
+                type: 'raster',
+                tiles: ['https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg'],
+                tileSize: 256,
+                minzoom: 2,
+                maxzoom: 18,
+                attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">地理院タイル</a>'
+            },
+            gsivt: {
+                type: 'vector',
+                tiles: ['pmtiles://https://cyberjapandata.gsi.go.jp/xyz/optimal_bvmap-v1/optimal_bvmap-v1.pmtiles/{z}/{x}/{y}'],
+                minzoom: 4,
+                maxzoom: 16,
+                attribution: '国土地理院最適化ベクトルタイル'
+            },
+            terrain: {
+                type: 'raster-dem',
+                tiles: ['gsidem://{z}/{x}/{y}'],
+                tileSize: 256,
+                maxzoom: 14,
+                encoding: 'terrarium',
+                attribution: '標高：国土地理院'
+            }
+        },
+        layers: [
+            { id: 'std',   type: 'raster', source: 'std', layout: { visibility: 'none' } },
+            { id: 'photo', type: 'raster', source: 'photo' },
+            // 徒歩道の強調(縁取り)
+            {
+                id: 'trail-casing', type: 'line', source: 'gsivt', 'source-layer': 'RdCL',
+                minzoom: TRAIL_MINZOOM,
+                filter: ['in', ['get', 'vt_code'], ['literal', TRAIL_CODES]],
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: {
+                    'line-color': '#ffffff',
+                    'line-opacity': 0.8,
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 11, 2, 13, 3, 15, 5, 18, 9]
+                }
+            },
+            // 徒歩道の強調(本線)
+            {
+                id: 'trail', type: 'line', source: 'gsivt', 'source-layer': 'RdCL',
+                minzoom: TRAIL_MINZOOM,
+                filter: ['in', ['get', 'vt_code'], ['literal', TRAIL_CODES]],
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: {
+                    'line-color': '#ff7a00',
+                    'line-width': ['interpolate', ['linear'], ['zoom'], 11, 1, 13, 1.5, 15, 3, 18, 6],
+                    'line-dasharray': [2, 1]
+                }
+            }
+        ],
+        terrain: { source: 'terrain', exaggeration: 1 }
+    }
+});
+
+// ---------------------------------------------
+// エラー通知(×で閉じる)
+// ---------------------------------------------
+const errorItems = {};   // key -> { el, count }
+
+function showError(key, message, detail, retry) {
+    const box = document.getElementById('errorBox');
+    let item = errorItems[key];
+
+    if (!item) {
+        const el = document.createElement('div');
+        el.className = 'errorItem';
+        el.innerHTML = `
+            <div class="msg">
+                <div class="text"></div>
+                <div class="detail"></div>
+            </div>
+            <button class="retry" title="もう一度読み込む">再読み込み</button>
+            <button class="close" title="閉じる">×</button>`;
+        el.querySelector('.close').onclick = () => closeError(key);
+        box.appendChild(el);
+        item = errorItems[key] = { el, count: 0 };
+    }
+
+    item.count++;
+    item.el.querySelector('.text').textContent =
+        message + (item.count > 1 ? `(${item.count}件)` : '');
+    item.el.querySelector('.detail').textContent = detail || '';
+
+    const btn = item.el.querySelector('.retry');
+    btn.style.display = retry ? '' : 'none';
+    btn.onclick = () => {
+        closeError(key);
+        if (retry) retry();
+    };
+}
+
+function closeError(key) {
+    const item = errorItems[key];
+    if (!item) return;
+    item.el.remove();
+    delete errorItems[key];
+}
+
+// ソースのタイルを読み直す
+function reloadSource(sourceId) {
+    const src = map.getSource(sourceId);
+    if (src && src.tiles && src.setTiles) src.setTiles(src.tiles.slice());
+}
+
+const SOURCE_LABELS = {
+    gsivt: '徒歩道データ',
+    std: '標準地図',
+    photo: '航空写真',
+    terrain: '標高データ'
+};
+
+map.on('error', (e) => {
+    const err = e.error || {};
+    if (err.name === 'AbortError') return;
+    console.error(err);
+
+    const id = e.sourceId;
+    if (id && id.startsWith('gpx-')) return;
+
+    if (id === 'gsivt') {
+        showError('gsivt',
+            '徒歩道データを読み込めませんでした。時間をおいて再読み込みしてください。',
+            err.message,
+            () => { registerPMTiles(); reloadSource('gsivt'); });
+    } else if (id && SOURCE_LABELS[id]) {
+        showError(id,
+            `${SOURCE_LABELS[id]}の一部を読み込めませんでした。`,
+            err.message,
+            () => reloadSource(id));
+    } else {
+        showError('other', '地図の読み込み中にエラーが発生しました。', err.message, null);
+    }
+});
+
+map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
+map.addControl(new maplibregl.FullscreenControl());
+map.addControl(new maplibregl.ScaleControl());
+
+// 現在のズームレベル表示
+function updateZoomLevel() {
+    document.getElementById('zoomLevel').textContent = 'ZL ' + map.getZoom().toFixed(1);
+}
+map.on('zoom', updateZoomLevel);
+map.on('load', updateZoomLevel);
+updateZoomLevel();
+
+// ---------------------------------------------
+// ボタン操作
+// ---------------------------------------------
+const $ = id => document.getElementById(id);
+
+function setActive(on, off) {
+    $(on).classList.add('active');
+    $(off).classList.remove('active');
+}
+
+$('btnStd').onclick = () => {
+    map.setLayoutProperty('std', 'visibility', 'visible');
+    map.setLayoutProperty('photo', 'visibility', 'none');
+    setActive('btnStd', 'btnPhoto');
+};
+
+$('btnPhoto').onclick = () => {
+    map.setLayoutProperty('std', 'visibility', 'none');
+    map.setLayoutProperty('photo', 'visibility', 'visible');
+    setActive('btnPhoto', 'btnStd');
+};
+
+$('trailColor').oninput = (e) => {
+    map.setPaintProperty('trail', 'line-color', e.target.value);
+};
+
+$('btnTrail').onclick = () => {
+    const on = !$('btnTrail').classList.contains('active');
+    ['trail-casing', 'trail'].forEach(id =>
+        map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'));
+    $('btnTrail').classList.toggle('active', on);
+};
+
+// 地形の強調倍率
+let exaggeration = 1;
+let is3D = true;
+
+$('exagSlider').oninput = (e) => {
+    releaseFreeze();
+    exaggeration = parseFloat(e.target.value);
+    $('exagValue').textContent = exaggeration.toFixed(1) + '倍';
+    if (is3D) {
+        map.setTerrain({ source: 'terrain', exaggeration });
+    }
+};
+
+// ---------------------------------------------
+// 2D:傾き・回転を禁止して常に北が上 / 3D:元に戻す
+// ---------------------------------------------
+const MAX_PITCH_3D = 85;
+let lock2D = false;   // 2Dへの切り替え完了後に true
+
+function setRotatePitchEnabled(enabled) {
+    if (enabled) {
+        map.dragRotate.enable();
+        map.touchZoomRotate.enableRotation();
+        map.keyboard.enableRotation();
+        map.touchPitch.enable();
+    } else {
+        map.dragRotate.disable();
+        map.touchZoomRotate.disableRotation();
+        map.keyboard.disableRotation();
+        map.touchPitch.disable();
+    }
+}
+
+// 念のため:2D中に何らかの理由で回転・傾きが生じたら戻す
+map.on('rotate', () => {
+    if (lock2D && map.getBearing() !== 0) map.setBearing(0);
+});
+map.on('pitch', () => {
+    if (lock2D && map.getPitch() !== 0) map.setPitch(0);
+});
+
+$('btn3d').onclick = () => {
+    releaseFreeze();
+    is3D = true;
+    lock2D = false;
+    map.setMaxPitch(MAX_PITCH_3D);
+    setRotatePitchEnabled(true);
+    map.setTerrain({ source: 'terrain', exaggeration });
+    map.easeTo({ pitch: 60, duration: 800 });
+    $('exagSlider').disabled = false;
+    $('exagBox').classList.remove('disabled');
+    setActive('btn3d', 'btn2d');
+};
+
+$('btn2d').onclick = () => {
+    releaseFreeze();
+    is3D = false;
+    map.setTerrain(null);
+    setRotatePitchEnabled(false);
+    map.easeTo({ pitch: 0, bearing: 0, duration: 800 });
+    // 北向き・真上からの表示になってから傾きを固定
+    map.once('moveend', () => {
+        if (is3D) return;
+        map.jumpTo({ pitch: 0, bearing: 0 });
+        map.setMaxPitch(0);
+        lock2D = true;
+    });
+    $('exagSlider').disabled = true;
+    $('exagBox').classList.add('disabled');
+    setActive('btn2d', 'btn3d');
+};
+
+// ---------------------------------------------
+// GPX 軌跡表示
+// ---------------------------------------------
+const COLORS = ['#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4',
+                '#42d4f4', '#f032e6', '#9a6324', '#000075', '#808000'];
+const tracks = {};   // id -> { markers, bounds }
+let trackCount = 0;
+
+// 2点間の距離(m)
+function haversine(a, b) {
+    const R = 6371000;
+    const toRad = d => d * Math.PI / 180;
+    const dLat = toRad(b[1] - a[1]);
+    const dLon = toRad(b[0] - a[0]);
+    const s = Math.sin(dLat / 2) ** 2 +
+              Math.cos(toRad(a[1])) * Math.cos(toRad(b[1])) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+// GPXを解析して線分の配列を返す
+function parseGpx(text) {
+    const xml = new DOMParser().parseFromString(text, 'application/xml');
+    if (xml.getElementsByTagName('parsererror').length) {
+        throw new Error('GPXの形式が正しくありません');
+    }
+
+    const segments = [];
+    const readPoints = (nodes) => Array.from(nodes).map(p => {
+        const ele = p.getElementsByTagName('ele')[0];
+        const time = p.getElementsByTagName('time')[0];
+        const t = time ? Date.parse(time.textContent.trim()) : NaN;
+        return [
+            parseFloat(p.getAttribute('lon')),
+            parseFloat(p.getAttribute('lat')),
+            ele ? parseFloat(ele.textContent) : null,
+            isNaN(t) ? null : t
+        ];
+    }).filter(c => !isNaN(c[0]) && !isNaN(c[1]));
+
+    // トラック(trkseg)
+    for (const seg of xml.getElementsByTagName('trkseg')) {
+        const pts = readPoints(seg.getElementsByTagName('trkpt'));
+        if (pts.length >= 2) segments.push(pts);
+    }
+    // ルート(rte)
+    for (const rte of xml.getElementsByTagName('rte')) {
+        const pts = readPoints(rte.getElementsByTagName('rtept'));
+        if (pts.length >= 2) segments.push(pts);
+    }
+
+    const nameNode = xml.querySelector('metadata > name, trk > name, rte > name');
+    return { segments, name: nameNode ? nameNode.textContent.trim() : '' };
+}
+
+// 距離・獲得標高を計算
+function calcStats(segments) {
+    let dist = 0, gain = 0;
+    for (const seg of segments) {
+        for (let i = 1; i < seg.length; i++) {
+            dist += haversine(seg[i - 1], seg[i]);
+            const e0 = seg[i - 1][2], e1 = seg[i][2];
+            if (e0 !== null && e1 !== null && e1 > e0) gain += e1 - e0;
+        }
+    }
+    return { dist, gain };
+}
+
+function addTrack(fileName, text) {
+    const { segments, name } = parseGpx(text);
+    if (segments.length === 0) {
+        throw new Error('軌跡(trkpt / rtept)が見つかりません');
+    }
+
+    const id = 'gpx-' + (trackCount++);
+    const color = COLORS[(trackCount - 1) % COLORS.length];
+
+    map.addSource(id, {
+        type: 'geojson',
+        data: {
+            type: 'Feature',
+            geometry: {
+                type: 'MultiLineString',
+                coordinates: segments.map(s => s.map(c => [c[0], c[1]]))
+            }
+        }
+    });
+
+    // 白い縁取り + 色付きの線
+    map.addLayer({
+        id: id + '-casing', type: 'line', source: id,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#ffffff', 'line-width': 7 }
+    }, playBeforeId());
+    map.addLayer({
+        id: id, type: 'line', source: id,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': color, 'line-width': 4 }
+    }, playBeforeId());
+
+    // スタート / ゴールのマーカー
+    const first = segments[0][0];
+    const lastSeg = segments[segments.length - 1];
+    const last = lastSeg[lastSeg.length - 1];
+    const markers = [
+        new maplibregl.Marker({ color: '#2e9e3e' })
+            .setLngLat([first[0], first[1]])
+            .setPopup(new maplibregl.Popup().setText('スタート'))
+            .addTo(map),
+        new maplibregl.Marker({ color: '#d63031' })
+            .setLngLat([last[0], last[1]])
+            .setPopup(new maplibregl.Popup().setText('ゴール'))
+            .addTo(map)
+    ];
+
+    // ズーム計算用の点群
+    const points = segments.flat();
+
+    tracks[id] = { markers, points, name: name || fileName, play: buildPlayData(segments) };
+
+    // 一覧に追加
+    const { dist, gain } = calcStats(segments);
+    const item = document.createElement('div');
+    item.className = 'trackItem';
+    item.innerHTML = `
+        <input type="color" class="trackColor" value="${color}" title="軌跡の色">
+        <div class="trackInfo" title="クリックで移動">
+            <div class="trackName"></div>
+            <div>${(dist / 1000).toFixed(2)} km / 獲得標高 ${Math.round(gain)} m</div>
+        </div>
+        <button title="削除">×</button>`;
+    item.querySelector('.trackName').textContent = name || fileName;
+    item.querySelector('.trackColor').oninput = (e) => {
+        if (map.getLayer(id)) map.setPaintProperty(id, 'line-color', e.target.value);
+    };
+    item.querySelector('.trackInfo').onclick = () => fitTo(points);
+    item.querySelector('button').onclick = () => {
+        removeTrack(id);
+        item.remove();
+        updateHint();
+        refreshPlaySelect();
+    };
+    $('trackList').appendChild(item);
+    updateHint();
+
+    // 追加した軌跡を再生対象にする
+    refreshPlaySelect();
+    selectPlayTrack(id);
+
+    return points;
+}
+
+function removeTrack(id) {
+    const t = tracks[id];
+    if (!t) return;
+    t.markers.forEach(m => m.remove());
+    map.removeLayer(id);
+    map.removeLayer(id + '-casing');
+    map.removeSource(id);
+    delete tracks[id];
+}
+
+// ---------------------------------------------
+// 自動ズーム
+// ---------------------------------------------
+const FIT_PADDING = 60;   // 画面端の余白(px)
+const FIT_PITCH = 60;     // 3D表示時の傾き(度)
+const MAX_FIT_ZOOM = 16;
+
+// 点の標高(GPXに無ければ読み込み済みの地形から取得)
+function getElevation(p) {
+    if (p[2] !== null && !isNaN(p[2])) return p[2];
+    if (is3D && exaggeration > 0) {
+        const q = map.queryTerrainElevation([p[0], p[1]]);
+        if (q !== null && q !== undefined) return q / exaggeration;
+    }
+    return null;
+}
+
+// 点数が多い場合は間引く
+function samplePoints(points, max = 1000) {
+    const step = Math.max(1, Math.ceil(points.length / max));
+    const out = [];
+    for (let i = 0; i < points.length; i += step) out.push(points[i]);
+    out.push(points[points.length - 1]);
+    return out;
+}
+
+// ---------------------------------------------
+// 自動ズームのアニメーション
+//   中心の高さを計算値に固定して移動するため、
+//   標高タイルが後から届いても構図がずれない
+// ---------------------------------------------
+let fitAnim = null;      // 実行中のアニメーション
+let fitFrozen = false;   // 中心の高さを固定中か
+let fitSeq = 0;
+
+// 固定を解除し、カメラ位置を保ったまま通常の地面追従に戻す
+function releaseFreeze() {
+    if (fitAnim) { cancelAnimationFrame(fitAnim); fitAnim = null; }
+    if (!fitFrozen) return;
+    fitFrozen = false;
+    fitSeq++;
+    map.setCenterClampedToGround(true);
+    if (map.terrain) {
+        // 画面中心の先にある地面へ中心を移し、カメラ位置はそのまま
+        map.transform.recalculateZoomAndCenter(map.terrain);
+        map.triggerRepaint();
+    }
+}
+
+// ユーザーが操作したら、すぐに通常状態へ戻す
+map.on('movestart', (e) => {
+    if (e.originalEvent) releaseFreeze();
+});
+
+const lerp = (a, b, t) => a + (b - a) * t;
+const easeInOut = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+function animateCamera(target, duration = 1200) {
+    releaseFreeze();
+
+    const seq = ++fitSeq;
+    fitFrozen = true;
+    map.setCenterClampedToGround(false);
+
+    const c0 = map.getCenter();
+    const z0 = map.getZoom();
+    const p0 = map.getPitch();
+    const b0 = map.getBearing();
+    const e0 = map.transform.elevation;
+
+    // 回転は近い方向へ
+    let db = target.bearing - b0;
+    db = ((db + 540) % 360) - 180;
+
+    const t0 = performance.now();
+
+    const step = (now) => {
+        if (seq !== fitSeq) return;
+        const k = Math.min(1, (now - t0) / duration);
+        const t = easeInOut(k);
+
+        map.jumpTo({
+            center: [lerp(c0.lng, target.center[0], t), lerp(c0.lat, target.center[1], t)],
+            zoom: lerp(z0, target.zoom, t),
+            pitch: lerp(p0, FIT_PITCH, t),
+            bearing: b0 + db * t,
+            elevation: lerp(e0, target.elevation, t)
+        });
+
+        if (k < 1) {
+            fitAnim = requestAnimationFrame(step);
+        } else {
+            fitAnim = null;
+            // タイルの読み込みが終わったら通常状態へ戻す
+            waitForIdle(() => { if (seq === fitSeq) releaseFreeze(); });
+        }
+    };
+    fitAnim = requestAnimationFrame(step);
+}
+
+// 読み込み完了(idle)を待つ。最大10秒
+function waitForIdle(cb) {
+    let done = false;
+    const finish = () => { if (!done) { done = true; cb(); } };
+    map.once('idle', finish);
+    setTimeout(finish, 10000);
+}
+
+function fitTo(allPoints) {
+    if (!allPoints || allPoints.length === 0) return;
+    releaseFreeze();
+
+    // 2D:通常の範囲合わせ
+    if (!is3D) {
+        const bounds = new maplibregl.LngLatBounds();
+        allPoints.forEach(c => bounds.extend([c[0], c[1]]));
+        map.fitBounds(bounds, { padding: FIT_PADDING, bearing: 0, pitch: 0, duration: 1000 });
+        return;
+    }
+
+    const cam = computeCamera3D(samplePoints(allPoints));
+
+    if (cam.elevation === null) {
+        // 標高が分からない場合は MapLibre 標準の移動
+        map.easeTo({ center: cam.center, zoom: cam.zoom, bearing: cam.bearing, pitch: FIT_PITCH, duration: 1200 });
+    } else {
+        animateCamera(cam);
+    }
+}
+
+// 3D:傾き・標高・向きを考慮してカメラを計算
+// 戻り値の elevation は画面中心の高さ(強調倍率込み)。標高不明なら null
+function computeCamera3D(points, options = {}) {
+    const W = map.getContainer().clientWidth;
+    const H = map.getContainer().clientHeight;
+    const pitch = FIT_PITCH * Math.PI / 180;
+    const camDist = 1.5 * H; // MapLibre既定の視野角(約36.87°)での画面中心までの距離(px)
+
+    // 基準点(範囲の中央)
+    let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
+    points.forEach(p => {
+        minLon = Math.min(minLon, p[0]); maxLon = Math.max(maxLon, p[0]);
+        minLat = Math.min(minLat, p[1]); maxLat = Math.max(maxLat, p[1]);
+    });
+    const lon0 = (minLon + maxLon) / 2;
+    const lat0 = (minLat + maxLat) / 2;
+    const mLat = 111320;
+    const mLon = 111320 * Math.cos(lat0 * Math.PI / 180);
+
+    // 標高:平均標高を基準にする
+    const eles = points.map(getElevation);
+    const valid = eles.filter(e => e !== null);
+    const avgEle = valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : 0;
+
+    // ローカル座標(m)。z は強調倍率込みの絶対高さ
+    const pts = points.map((p, i) => ({
+        x: (p[0] - lon0) * mLon,
+        y: (p[1] - lat0) * mLat,
+        z: (eles[i] ?? avgEle) * exaggeration
+    }));
+
+    // 基準高さ(画面中心の高さ)= 軌跡の平均標高
+    const refZ = avgEle * exaggeration;
+
+    // --- 向き:軌跡の長い方向を画面の横にする(主成分分析) ---
+    let bearing;
+    if (options.bearing !== undefined) {
+        bearing = options.bearing;
+    } else {
+    let sxx = 0, syy = 0, sxy = 0;
+    pts.forEach(p => { sxx += p.x * p.x; syy += p.y * p.y; sxy += p.x * p.y; });
+    const theta = 0.5 * Math.atan2(2 * sxy, sxx - syy); // 長軸の角度(東から反時計回り)
+    const cand = [-theta * 180 / Math.PI, -theta * 180 / Math.PI + 180]
+        .map(b => ((b + 540) % 360) - 180);
+
+    // 奥側が高くなる向きを選ぶ(手前の山で線が隠れにくい)
+    const slope = (bDeg) => {
+        const b = bDeg * Math.PI / 180;
+        return pts.reduce((s, p) => s + (p.x * Math.sin(b) + p.y * Math.cos(b)) * (p.z - refZ), 0);
+    };
+    const s0 = slope(cand[0]);
+    if (Math.abs(s0) > 1e-6) {
+        bearing = s0 > 0 ? cand[0] : cand[1];
+    } else {
+        // 標高情報が無い場合は北寄りの向き
+        bearing = Math.abs(cand[0]) <= 90 ? cand[0] : cand[1];
+    }
+    }
+    const b = bearing * Math.PI / 180;
+    const cosB = Math.cos(b), sinB = Math.sin(b);
+
+    // --- 透視投影で画面上の位置を計算 ---
+    const ppmAt = (zoom) => 512 * Math.pow(2, zoom) / (40075016.686 * Math.cos(lat0 * Math.PI / 180));
+
+    function projectAll(cx, cy, zoom) {
+        const ppm = ppmAt(zoom);
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        let behind = false;
+        for (const p of pts) {
+            const dx = p.x - cx, dy = p.y - cy;
+            const u = dx * cosB - dy * sinB;          // 画面の横方向
+            const v = dx * sinB + dy * cosB;          // 画面の奥方向
+            const h = p.z - refZ;
+            const up = v * Math.cos(pitch) + h * Math.sin(pitch);
+            const depthOff = v * Math.sin(pitch) - h * Math.cos(pitch);
+            const depth = camDist + depthOff * ppm;
+            if (depth < camDist * 0.1) { behind = true; break; }
+            const X = u * ppm * camDist / depth;
+            const Y = -up * ppm * camDist / depth;
+            minX = Math.min(minX, X); maxX = Math.max(maxX, X);
+            minY = Math.min(minY, Y); maxY = Math.max(maxY, Y);
+        }
+        return { minX, maxX, minY, maxY, behind };
+    }
+
+    const fits = (cx, cy, zoom) => {
+        const r = projectAll(cx, cy, zoom);
+        if (r.behind) return false;
+        const hw = W / 2 - FIT_PADDING, hh = H / 2 - FIT_PADDING;
+        return r.minX >= -hw && r.maxX <= hw && r.minY >= -hh && r.maxY <= hh;
+    };
+
+    // ズームを二分探索 → 中心のずれを補正、を数回繰り返す
+    let cx = 0, cy = 0, zoom = 10;
+    for (let iter = 0; iter < 4; iter++) {
+        let lo = 1, hi = MAX_FIT_ZOOM;
+        for (let i = 0; i < 25; i++) {
+            const mid = (lo + hi) / 2;
+            if (fits(cx, cy, mid)) lo = mid; else hi = mid;
+        }
+        zoom = lo;
+
+        const r = projectAll(cx, cy, zoom);
+        if (r.behind) break;
+        const ppm = ppmAt(zoom);
+        const offX = (r.minX + r.maxX) / 2;
+        const offY = (r.minY + r.maxY) / 2;
+        const du = offX / ppm;
+        const dv = -offY / (ppm * Math.cos(pitch));
+        cx += du * cosB + dv * sinB;
+        cy += -du * sinB + dv * cosB;
+    }
+
+    return {
+        center: [lon0 + cx / mLon, lat0 + cy / mLat],
+        zoom,
+        bearing,
+        elevation: valid.length ? refZ : null
+    };
+}
+
+function updateHint() {
+    $('trackHint').style.display = Object.keys(tracks).length ? 'none' : 'block';
+}
+
+// ---------------------------------------------
+// GPX 再生
+// ---------------------------------------------
+const WALK_SPEED = 4000 / 3600;   // 時刻の無いGPXの換算速度(m/秒 = 時速4km)
+const FOLLOW_ZOOM = 15;           // 追従開始時の最小ズーム
+const FOLLOW_PITCH = 65;          // 追従カメラ(3D)の傾き
+
+const play = {
+    id: null, data: null, t: 0,
+    playing: false, lastFrame: 0, raf: null,
+    marker: null,
+    follow: true, followReady: false, heading: null,
+    lastLineUpdate: 0
+};
+const profile = { base: null, layout: null };
+
+const emptyFC = () => ({ type: 'FeatureCollection', features: [] });
+
+// 通過済みライン(GPX軌跡の上に描く)
+map.on('load', () => {
+    map.addSource('play-progress', { type: 'geojson', data: emptyFC() });
+    map.addLayer({
+        id: 'play-progress-casing', type: 'line', source: 'play-progress',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#263746', 'line-width': 9 }
+    });
+    map.addLayer({
+        id: 'play-progress', type: 'line', source: 'play-progress',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#ffd400', 'line-width': 5 }
+    });
+});
+
+function playBeforeId() {
+    return map.getLayer('play-progress-casing') ? 'play-progress-casing' : undefined;
+}
+
+// 再生用データを作成(累積距離・時刻・標高)
+function buildPlayData(segments) {
+    const pts = segments.flat();
+    const n = pts.length;
+    const lon = new Float64Array(n), lat = new Float64Array(n);
+    const cum = new Float64Array(n), t = new Float64Array(n);
+    const raw = new Array(n);
+    let timeCount = 0;
+
+    for (let i = 0; i < n; i++) {
+        lon[i] = pts[i][0];
+        lat[i] = pts[i][1];
+        cum[i] = i ? cum[i - 1] + haversine(pts[i - 1], pts[i]) : 0;
+        raw[i] = pts[i][3];
+        if (raw[i] !== null) timeCount++;
+    }
+
+    // 時刻:8割以上の点にあれば実時間で再生
+    let hasTime = timeCount >= n * 0.8;
+    let startTime = null;
+    if (hasTime) {
+        // 欠けている時刻を距離で補間
+        let prev = -1;
+        for (let i = 0; i < n; i++) {
+            if (raw[i] === null) continue;
+            if (prev >= 0 && i - prev > 1) {
+                const dd = cum[i] - cum[prev];
+                for (let k = prev + 1; k < i; k++) {
+                    const f = dd > 0 ? (cum[k] - cum[prev]) / dd : (k - prev) / (i - prev);
+                    raw[k] = raw[prev] + (raw[i] - raw[prev]) * f;
+                }
+            }
+            prev = i;
+        }
+        const fi = raw.findIndex(v => v !== null);
+        let li = n - 1;
+        while (li > 0 && raw[li] === null) li--;
+        for (let k = 0; k < fi; k++) raw[k] = raw[fi];
+        for (let k = li + 1; k < n; k++) raw[k] = raw[li];
+
+        startTime = raw[0];
+        for (let i = 0; i < n; i++) {
+            t[i] = Math.max(raw[i] - startTime, i ? t[i - 1] : 0);
+        }
+        if (t[n - 1] <= 0) hasTime = false;
+    }
+    if (!hasTime) {
+        startTime = null;
+        for (let i = 0; i < n; i++) t[i] = cum[i] / WALK_SPEED * 1000;
+    }
+
+    // 標高:欠けを前後の値で補完(グラフ用)
+    const ele = pts.map(p => (p[2] === null || isNaN(p[2])) ? null : p[2]);
+    const hasEle = ele.some(e => e !== null);
+    if (hasEle) {
+        let last = ele.find(e => e !== null);
+        for (let i = 0; i < n; i++) {
+            if (ele[i] === null) ele[i] = last; else last = ele[i];
+        }
+    }
+
+    return {
+        n, lon, lat, cum, t, ele, hasEle, hasTime, startTime,
+        total: t[n - 1], dist: cum[n - 1],
+        coords: pts.map(p => [p[0], p[1]])
+    };
+}
+
+// arr[i] <= v となる最大の i
+function searchIndex(arr, v) {
+    let lo = 0, hi = arr.length - 1;
+    if (v <= arr[0]) return 0;
+    if (v >= arr[hi]) return hi;
+    while (hi - lo > 1) {
+        const m = (lo + hi) >> 1;
+        if (arr[m] <= v) lo = m; else hi = m;
+    }
+    return lo;
+}
+
+// 時刻(または距離)から位置・標高などを補間
+function stateAt(d, arr, v) {
+    const i = searchIndex(arr, v);
+    const j = Math.min(i + 1, d.n - 1);
+    const span = arr[j] - arr[i];
+    const f = span > 0 ? Math.min(1, Math.max(0, (v - arr[i]) / span)) : 0;
+    return {
+        i, f,
+        lon: lerp(d.lon[i], d.lon[j], f),
+        lat: lerp(d.lat[i], d.lat[j], f),
+        ele: d.hasEle ? lerp(d.ele[i], d.ele[j], f) : null,
+        dist: lerp(d.cum[i], d.cum[j], f),
+        t: lerp(d.t[i], d.t[j], f)
+    };
+}
+
+// 進行方向(度、北=0)。前後30mの位置から計算
+function headingAt(d, dist) {
+    const a = stateAt(d, d.cum, Math.max(0, dist - 30));
+    const b = stateAt(d, d.cum, Math.min(d.dist, dist + 30));
+    const dx = (b.lon - a.lon) * 111320 * Math.cos(a.lat * Math.PI / 180);
+    const dy = (b.lat - a.lat) * 111320;
+    if (Math.hypot(dx, dy) < 1) return null;
+    return Math.atan2(dx, dy) * 180 / Math.PI;
+}
+
+function fmtDuration(ms) {
+    const sec = Math.max(0, Math.round(ms / 1000));
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor(sec % 3600 / 60);
+    const s2 = sec % 60;
+    return `${h}:${String(m).padStart(2, '0')}:${String(s2).padStart(2, '0')}`;
+}
+
+// 再生する軌跡の選択肢を更新
+function refreshPlaySelect() {
+    const sel = $('playTrack');
+    const ids = Object.keys(tracks);
+    sel.innerHTML = '';
+    ids.forEach(id => {
+        const o = document.createElement('option');
+        o.value = id;
+        o.textContent = tracks[id].name;
+        sel.appendChild(o);
+    });
+    if (!ids.includes(play.id)) {
+        selectPlayTrack(ids.length ? ids[ids.length - 1] : null);
+    } else {
+        sel.value = play.id;
+    }
+}
+
+function selectPlayTrack(id) {
+    pausePlayback();
+    play.id = id;
+    play.data = (id && tracks[id]) ? tracks[id].play : null;
+    play.t = 0;
+    play.heading = null;
+    play.followReady = false;
+
+    if (!play.data) {
+        $('playPanel').classList.add('hidden');
+        if (play.marker) play.marker.remove();
+        if (map.getSource('play-progress')) map.getSource('play-progress').setData(emptyFC());
+        return;
+    }
+
+    $('playPanel').classList.remove('hidden');
+    $('playTrack').value = id;
+
+    if (!play.marker) {
+        const el = document.createElement('div');
+        el.className = 'playMarker';
+        play.marker = new maplibregl.Marker({ element: el });
+    }
+    play.marker.setLngLat([play.data.lon[0], play.data.lat[0]]).addTo(map);
+
+    buildProfileBase();
+    renderPlayState(true);
+}
+
+// 現在の再生位置を地図・パネルに反映
+function renderPlayState(force = false) {
+    const d = play.data;
+    if (!d) return;
+    const s = stateAt(d, d.t, play.t);
+
+    play.marker.setLngLat([s.lon, s.lat]);
+
+    // 通過済みライン(負荷軽減のため0.1秒ごと)
+    const now = performance.now();
+    if (force || now - play.lastLineUpdate > 100) {
+        play.lastLineUpdate = now;
+        const src = map.getSource('play-progress');
+        if (src) {
+            const coords = d.coords.slice(0, s.i + 1);
+            coords.push([s.lon, s.lat]);
+            src.setData(coords.length >= 2 ? {
+                type: 'Feature',
+                geometry: { type: 'LineString', coordinates: coords }
+            } : emptyFC());
+        }
+    }
+
+    // パネル
+    $('playSeek').value = d.total > 0 ? Math.round(play.t / d.total * 1000) : 0;
+    const clock = d.hasTime
+        ? new Date(d.startTime + play.t).toLocaleTimeString('ja-JP')
+        : '時刻なし(時速4kmで換算)';
+    const eleText = s.ele !== null ? `標高 ${Math.round(s.ele)} m` : '標高 --';
+    $('playInfo').textContent =
+        `${clock} | 経過 ${fmtDuration(play.t)} / ${fmtDuration(d.total)} | ` +
+        `${(s.dist / 1000).toFixed(2)} / ${(d.dist / 1000).toFixed(2)} km | ${eleText}`;
+
+    drawProfile(s);
+
+    // 追従カメラ
+    if (play.follow && play.followReady) followCamera(s);
+}
+
+function followCamera(s) {
+    if (is3D) {
+        const h = headingAt(play.data, s.dist);
+        if (h !== null) {
+            if (play.heading === null) {
+                play.heading = h;
+            } else {
+                // 急に向きが変わらないよう少しずつ回す
+                const diff = ((h - play.heading + 540) % 360) - 180;
+                play.heading += diff * 0.06;
+            }
+        }
+        map.jumpTo({
+            center: [s.lon, s.lat],
+            bearing: play.heading !== null ? play.heading : map.getBearing()
+        });
+    } else {
+        map.jumpTo({ center: [s.lon, s.lat] });
+    }
+}
+
+// 追従を開始(マーカーの位置へなめらかに移動)
+function startFollow() {
+    const d = play.data;
+    if (!d) return;
+    releaseFreeze();
+    const s = stateAt(d, d.t, play.t);
+    play.followReady = false;
+    play.heading = headingAt(d, s.dist);
+
+    const opts = {
+        center: [s.lon, s.lat],
+        zoom: Math.max(map.getZoom(), FOLLOW_ZOOM),
+        duration: 800
+    };
+    if (is3D) {
+        opts.pitch = FOLLOW_PITCH;
+        if (play.heading !== null) opts.bearing = play.heading;
+    }
+    map.easeTo(opts);
+    map.once('moveend', () => {
+        if (play.follow) play.followReady = true;
+    });
+}
+
+function stopFollow() {
+    play.follow = false;
+    play.followReady = false;
+    $('followCam').checked = false;
+}
+
+function tick(now) {
+    if (!play.playing || !play.data) return;
+    const dt = Math.min(now - play.lastFrame, 100);  // タブ切替後の飛びを防ぐ
+    play.lastFrame = now;
+    play.t += dt * parseFloat($('playSpeed').value);
+
+    if (play.t >= play.data.total) {
+        play.t = play.data.total;
+        renderPlayState(true);
+        pausePlayback();
+        return;
+    }
+    renderPlayState();
+    play.raf = requestAnimationFrame(tick);
+}
+
+function startPlayback() {
+    if (!play.data) return;
+    if (play.t >= play.data.total) play.t = 0;
+    play.playing = true;
+    play.lastFrame = performance.now();
+    $('btnPlay').textContent = '⏸';
+    if (play.follow) startFollow();
+    play.raf = requestAnimationFrame(tick);
+}
+
+function pausePlayback() {
+    play.playing = false;
+    if (play.raf) cancelAnimationFrame(play.raf);
+    play.raf = null;
+    $('btnPlay').textContent = '▶';
+}
+
+function seekTo(t) {
+    if (!play.data) return;
+    play.t = Math.min(play.data.total, Math.max(0, t));
+    renderPlayState(true);
+    // 追従中で、まだ追従開始前なら位置だけ合わせる
+    if (play.follow && !play.followReady) {
+        const s = stateAt(play.data, play.data.t, play.t);
+        map.jumpTo({ center: [s.lon, s.lat] });
+    }
+}
+
+// ---- 標高グラフ ----
+function buildProfileBase() {
+    const cv = $('profile');
+    const d = play.data;
+    const dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (!w || !h) return;
+    cv.width = Math.round(w * dpr);
+    cv.height = Math.round(h * dpr);
+
+    const off = document.createElement('canvas');
+    off.width = cv.width;
+    off.height = cv.height;
+    const ctx = off.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    const L = { left: 44, right: 8, top: 8, bottom: 18, w, h, dpr, minE: 0, maxE: 1 };
+    profile.layout = L;
+    profile.base = off;
+
+    ctx.font = '11px sans-serif';
+    if (!d || !d.hasEle || d.dist <= 0) {
+        ctx.fillStyle = '#888';
+        ctx.fillText('標高データがありません(グラフ上をクリックすると位置を移動できます)', L.left, h / 2);
+        return;
+    }
+
+    let minE = Infinity, maxE = -Infinity;
+    for (let i = 0; i < d.n; i++) {
+        minE = Math.min(minE, d.ele[i]);
+        maxE = Math.max(maxE, d.ele[i]);
+    }
+    const padE = Math.max(10, (maxE - minE) * 0.1);
+    L.minE = minE - padE;
+    L.maxE = maxE + padE;
+
+    const pw = w - L.left - L.right;
+    const ph = h - L.top - L.bottom;
+    const X = dist => L.left + dist / d.dist * pw;
+    const Y = e => L.top + (1 - (e - L.minE) / (L.maxE - L.minE)) * ph;
+
+    // 塗りつぶし
+    ctx.beginPath();
+    ctx.moveTo(X(0), L.top + ph);
+    for (let i = 0; i < d.n; i++) ctx.lineTo(X(d.cum[i]), Y(d.ele[i]));
+    ctx.lineTo(X(d.dist), L.top + ph);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(22, 131, 196, 0.2)';
+    ctx.fill();
+
+    // 線
+    ctx.beginPath();
+    for (let i = 0; i < d.n; i++) {
+        const x = X(d.cum[i]), y = Y(d.ele[i]);
+        if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    }
+    ctx.strokeStyle = '#1683c4';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // 軸の目盛り
+    ctx.fillStyle = '#555';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${Math.round(maxE)}m`, L.left - 4, Y(maxE));
+    ctx.fillText(`${Math.round(minE)}m`, L.left - 4, Y(minE));
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    ctx.fillText('0km', L.left, L.top + ph + 4);
+    ctx.textAlign = 'center';
+    ctx.fillText(`${(d.dist / 2000).toFixed(1)}km`, X(d.dist / 2), L.top + ph + 4);
+    ctx.textAlign = 'right';
+    ctx.fillText(`${(d.dist / 1000).toFixed(1)}km`, L.left + pw, L.top + ph + 4);
+}
+
+function drawProfile(s) {
+    const cv = $('profile');
+    const L = profile.layout;
+    const d = play.data;
+    if (!L || !profile.base || !d) return;
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(profile.base, 0, 0);
+    ctx.setTransform(L.dpr, 0, 0, L.dpr, 0, 0);
+
+    if (d.dist <= 0) return;
+    const pw = L.w - L.left - L.right;
+    const ph = L.h - L.top - L.bottom;
+    const x = L.left + s.dist / d.dist * pw;
+
+    ctx.strokeStyle = '#d63031';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x, L.top);
+    ctx.lineTo(x, L.top + ph);
+    ctx.stroke();
+
+    if (d.hasEle && s.ele !== null) {
+        const y = L.top + (1 - (s.ele - L.minE) / (L.maxE - L.minE)) * ph;
+        ctx.fillStyle = '#ffd400';
+        ctx.strokeStyle = '#263746';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+    }
+}
+
+// グラフのクリック・ドラッグで位置移動
+let profileDragging = false;
+function seekFromProfile(e) {
+    const d = play.data;
+    const L = profile.layout;
+    if (!d || !L || d.dist <= 0) return;
+    const rect = $('profile').getBoundingClientRect();
+    const pw = L.w - L.left - L.right;
+    const r = Math.min(1, Math.max(0, (e.clientX - rect.left - L.left) / pw));
+    seekTo(stateAt(d, d.cum, r * d.dist).t);
+}
+$('profile').addEventListener('pointerdown', (e) => {
+    profileDragging = true;
+    $('profile').setPointerCapture(e.pointerId);
+    seekFromProfile(e);
+});
+$('profile').addEventListener('pointermove', (e) => { if (profileDragging) seekFromProfile(e); });
+$('profile').addEventListener('pointerup', () => { profileDragging = false; });
+$('profile').addEventListener('pointercancel', () => { profileDragging = false; });
+
+// ---- 操作 ----
+$('btnPlay').onclick = () => { play.playing ? pausePlayback() : startPlayback(); };
+$('btnStop').onclick = () => { pausePlayback(); seekTo(0); };
+$('playTrack').onchange = (e) => selectPlayTrack(e.target.value);
+$('playSeek').oninput = (e) => {
+    if (play.data) seekTo(e.target.value / 1000 * play.data.total);
+};
+$('followCam').onchange = (e) => {
+    play.follow = e.target.checked;
+    if (play.follow) startFollow(); else play.followReady = false;
+};
+
+// 地図をドラッグ・回転したら追従を解除(ズームはそのまま追従)
+map.on('dragstart', (e) => { if (e.originalEvent && play.follow) stopFollow(); });
+map.on('rotatestart', (e) => { if (e.originalEvent && play.follow) stopFollow(); });
+
+window.addEventListener('resize', () => {
+    if (play.data) { buildProfileBase(); renderPlayState(true); }
+});
+
+// ドラッグ&ドロップ
+let dragDepth = 0;
+
+window.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    dragDepth++;
+    $('dropOverlay').classList.add('show');
+});
+
+window.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dragDepth--;
+    if (dragDepth <= 0) {
+        dragDepth = 0;
+        $('dropOverlay').classList.remove('show');
+    }
+});
+
+window.addEventListener('dragover', (e) => e.preventDefault());
+
+window.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    dragDepth = 0;
+    $('dropOverlay').classList.remove('show');
+
+    const files = Array.from(e.dataTransfer.files)
+        .filter(f => f.name.toLowerCase().endsWith('.gpx'));
+
+    if (files.length === 0) {
+        alert('GPXファイル(.gpx)をドロップしてください');
+        return;
+    }
+
+    const allPoints = [];
+
+    for (const file of files) {
+        try {
+            const pts = addTrack(file.name, await file.text());
+            allPoints.push(...pts);
+        } catch (err) {
+            alert(`${file.name}: ${err.message}`);
+        }
+    }
+
+    if (allPoints.length > 0) fitTo(allPoints);
+});
+</script>
+
 </body>
 </html>

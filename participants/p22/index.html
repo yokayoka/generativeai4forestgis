@@ -3,99 +3,92 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>野生生物観察 WebGIS｜調査設定を地図下に移動 v13</title>
+  <title>野生生物観察 WebGIS｜現在地へ移動・ポップアップ入力 v16</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
-  <style>
-    :root { --green:#197452; --dark:#152b26; --muted:#61746e; --light:#f4f7f5; --border:#dbe5df; --red:#b93131; }
+    <style>
+    :root {
+      --green:#197452; --dark:#152b26; --muted:#61746e; --light:#f4f7f5; --border:#dbe5df;
+      --red:#b93131; --panel:#ffffffee; --shadow:0 10px 24px rgba(21,43,38,.18);
+    }
     * { box-sizing:border-box; }
-    body { margin:0; font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif; color:var(--dark); }
-    #app { display:flex; height:100vh; height:100dvh; }
-    #sidebar { width:348px; flex-shrink:0; overflow-y:auto; background:var(--light); border-right:1px solid var(--border); }
-    .top { padding:20px 20px 15px; background:#fff; border-bottom:1px solid var(--border); }
-    .top h1 { font-size:20px; letter-spacing:.01em; margin:0 0 4px; }
-    .top p { margin:0; font-size:12px; color:var(--muted); }
-    .content { padding:16px 19px 24px; }
-    h2 { font-size:14px; margin:23px 0 10px; padding-bottom:7px; border-bottom:1px solid var(--border); }
-    h2:first-child { margin-top:0; }
+    html, body { margin:0; height:100%; }
+    body {
+      font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;
+      color:var(--dark); background:#e6eee9;
+    }
+    #app { position:relative; width:100vw; height:100vh; height:100dvh; overflow:hidden; }
+    #map { position:absolute; inset:0; background:#e6eee9; z-index:1; }
+    .floating-panel {
+      position:absolute; z-index:1000; background:var(--panel); backdrop-filter:blur(6px);
+      border:1px solid rgba(180,198,189,.95); border-radius:12px; box-shadow:var(--shadow);
+    }
+    .panel-inner { padding:12px; }
+    .top-right { top:12px; right:12px; width:min(260px, calc(100vw - 24px)); }
+    .bottom-right { right:12px; bottom:12px; width:min(280px, calc(100vw - 24px)); }
+    .bottom-left { left:12px; bottom:12px; width:min(290px, calc(100vw - 24px)); }
+    #recordPanel {
+      left:12px; bottom:12px; width:min(430px, calc(100vw - 24px));
+      max-height:calc(100dvh - 24px); overflow:auto; z-index:1200;
+      background:#fff; border:2px solid var(--green);
+    }
+    [hidden] { display:none !important; }
+    h2 { font-size:15px; margin:0 0 10px; }
+    h3 { font-size:14px; margin:0 0 8px; }
     label { display:block; font-size:13px; font-weight:650; margin:10px 0 6px; }
-    input:not([type="checkbox"]), select, textarea { width:100%; min-width:0; padding:10px 9px; border-radius:7px; border:1px solid #b8cac0; background:#fff; color:var(--dark); font:inherit; font-size:14px; }
+    input:not([type="checkbox"]), select, textarea {
+      width:100%; min-width:0; padding:10px 9px; border-radius:7px; border:1px solid #b8cac0;
+      background:#fff; color:var(--dark); font:inherit; font-size:14px;
+    }
     input:focus, select:focus, textarea:focus { outline:2px solid #91c9ad; outline-offset:1px; }
     textarea { resize:vertical; }
-    button { border:0; border-radius:7px; padding:11px 13px; background:#2368a0; color:white; font-size:14px; font-weight:700; cursor:pointer; }
-    button:hover:not(:disabled) { filter:brightness(.94); }
-    button:disabled { cursor:wait; opacity:.58; }
-    .wide { display:block; width:100%; margin:9px 0; }
-    /* 現在地を中央に表示するボタンだけを小さくする */
-    #centerLocation {
-      display:inline-block;
-      width:auto;
-      max-width:100%;
-      margin:6px 0;
-      padding:7px 11px;
-      font-size:12px;
-      line-height:1.35;
+    button {
+      border:0; border-radius:8px; padding:10px 12px; background:#2368a0; color:#fff;
+      font-size:14px; font-weight:700; cursor:pointer;
     }
+    button:hover:not(:disabled) { filter:brightness(.95); }
+    button:disabled { cursor:wait; opacity:.6; }
+    .wide { display:block; width:100%; margin:8px 0; }
     .green { background:var(--green); }
     .red { background:var(--red); }
     .grey { background:#63716c; }
-    .small { font-size:12px; line-height:1.65; color:var(--muted); margin:7px 0; }
-    .status { padding:10px 12px; border-radius:7px; background:#e3f2e9; color:#185c3e; font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+    #centerLocation { padding:8px 10px; font-size:12px; line-height:1.3; }
+    .small { font-size:12px; line-height:1.6; color:var(--muted); margin:6px 0; }
+    .substatus { font-size:12px; line-height:1.55; color:var(--muted); margin:6px 0; overflow-wrap:anywhere; }
+    .status { padding:10px 12px; border-radius:8px; background:#e3f2e9; color:#185c3e; font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
     .status.error { background:#fff0f0; color:#981f1f; }
     .status.pending { background:#fff4db; color:#795512; }
-    .substatus { font-size:12px; line-height:1.6; color:var(--muted); overflow-wrap:anywhere; margin:7px 0; }
-    #map { flex:1; min-width:0; min-height:0; background:#e6eee9; }
-    #recordPanel { padding:15px; margin-top:16px; background:#fff; border:2px solid var(--green); border-radius:11px; box-shadow:0 3px 12px #0f352212; }
-    #recordPanel h2 { font-size:16px; margin:0 0 8px; border:0; }
-    [hidden] { display:none !important; }
+    .overlay-label { display:block; margin:0 0 6px; font-size:12px; font-weight:700; color:#264238; }
+    .controls-stack > * + * { margin-top:8px; }
+    .mini-heading { font-size:11px; font-weight:700; color:#35564b; letter-spacing:.04em; margin:0 0 6px; text-transform:uppercase; }
     .date-grid { display:grid; grid-template-columns:1.6fr repeat(4,1fr); gap:5px; }
     .date-grid label { font-size:11px; text-align:center; margin-bottom:4px; }
     .date-grid input { padding:8px 3px !important; text-align:center; }
     .checks { padding:8px 10px; border-radius:7px; background:#f2f6f3; }
     .checks label { display:flex; align-items:center; gap:8px; margin:8px 0; font-size:13px; font-weight:500; }
     .checks input { width:18px; height:18px; accent-color:var(--green); }
-    .export-choices { display:flex; flex-direction:column; gap:6px; padding:10px 12px; margin:8px 0; background:white; border:1px solid var(--border); border-radius:7px; }
+    .export-choices { display:flex; flex-direction:column; gap:6px; padding:10px 12px; margin:8px 0; background:#fff; border:1px solid var(--border); border-radius:7px; }
     .export-choices label { display:flex; align-items:center; gap:10px; margin:0; padding:5px 2px; cursor:pointer; font-size:13px; }
     .export-choices input { width:19px; height:19px; accent-color:var(--green); }
     .export-choices small { color:var(--muted); font-weight:400; }
-
-    /* 種名オートコンプリート：スプレッドシートH列 */
     .species-field { position:relative; }
     #speciesSuggestions {
-      position:absolute; z-index:1800; top:calc(100% + 3px); left:0; right:0;
-      max-height:238px; overflow-y:auto; padding:4px;
-      border:1px solid #abc5ba; border-radius:8px;
-      background:#fff; box-shadow:0 6px 18px #152b2633;
+      position:absolute; z-index:1800; top:calc(100% + 3px); left:0; right:0; max-height:238px; overflow-y:auto;
+      padding:4px; border:1px solid #abc5ba; border-radius:8px; background:#fff; box-shadow:0 6px 18px #152b2633;
     }
-    .species-option {
-      display:block; width:100%; margin:0; padding:9px 11px;
-      border:0; border-radius:5px; background:#fff;
-      color:var(--dark); text-align:left; font-size:14px;
-      font-weight:500; cursor:pointer;
-    }
-    .species-option:hover, .species-option.active {
-      background:#dbefe3; color:#124c34;
-    }
+    .species-option { display:block; width:100%; margin:0; padding:9px 11px; border:0; border-radius:5px; background:#fff; color:var(--dark); text-align:left; font-size:14px; font-weight:500; cursor:pointer; }
+    .species-option:hover, .species-option.active { background:#dbefe3; color:#124c34; }
     #speciesSourceStatus { min-height:20px; }
     .species-file-fallback { margin:9px 0; padding:9px; border:1px solid #bed3c9; border-radius:7px; background:#f8faf9; }
     .species-file-fallback label { margin:0 0 6px; font-weight:600; }
     .species-file-fallback input[type=file] { padding:5px; font-size:12px; }
-    #reloadSpecies {
-      display:inline-block; width:auto; margin:4px 0; padding:4px 8px;
-      font-size:11px; font-weight:500; background:#64746b;
-    }
+    #reloadSpecies { display:inline-block; width:auto; margin:4px 0; padding:4px 8px; font-size:11px; font-weight:500; background:#64746b; }
     .required { color:#ba3030; }
-    .form-category-header { padding:12px; margin-bottom:14px; border-radius:8px; background:#edf5f0; border:1px solid #b4d7c4; }
-    .form-category-header label:first-child { margin-top:0; }
-    #surveySettings h2 { margin-top:20px; }
-    #surveySettings .form-category-header { margin:0; }
-    #surveySettingsStatus { margin-bottom:0; }
-    #groupHelp { margin-top:7px; }
     .checks.missing-group { border:2px solid var(--red); }
-    #formValidationMessage { margin:12px 0; }
-
     .buttons { display:flex; gap:8px; margin-top:8px; }
     .buttons button { flex:1; }
-    #info { font-size:12px; line-height:1.9; }
+    #info { font-size:12px; line-height:1.8; }
+    details summary { cursor:pointer; font-size:13px; font-weight:700; margin:0; }
+    details .details-body { margin-top:8px; }
     .popup-content { line-height:1.7; max-height:300px; overflow-y:auto; }
     .popup-content .row { border-bottom:1px solid #edf1ed; padding:2px 0; overflow-wrap:anywhere; }
     .popup-content .field-label { font-weight:700; }
@@ -106,101 +99,132 @@
     #mapSelectHint.active { color:#185c3e; font-weight:700; }
     .leaflet-popup-content { min-width:190px; }
     .leaflet-control-attribution { font-size:10px; }
-    @media (max-width:720px) {
-      #app { flex-direction:column; }
-      #sidebar { width:100%; max-height:45vh; border-right:0; border-bottom:1px solid var(--border); }
-      #map { min-height:55vh; }
-      .top { padding:13px 15px; }
-      .content { padding:12px 15px; }
+    @media (max-width: 720px) {
+      .top-right { width:min(200px, calc(100vw - 20px)); top:10px; right:10px; }
+      .bottom-right, .bottom-left { width:min(250px, calc(100vw - 20px)); bottom:10px; }
+      .bottom-right { right:10px; }
+      .bottom-left { left:10px; }
+      #recordPanel { left:10px; right:10px; width:auto; bottom:10px; max-height:calc(100dvh - 20px); }
+      .panel-inner { padding:10px; }
+      .buttons { flex-direction:column; }
     }
   </style>
 </head>
 <body>
 <div id="app">
-  <aside id="sidebar">
-    <header class="top">
-      <h1>野生生物観察 WebGIS</h1>
-      <p>地理院地図 × 観察記録 × 二次メッシュ × 自動保存</p>
-    </header>
-    <div class="content">
-      <div id="saveStatus" class="status pending" role="status" aria-live="polite">保存データを読み込んでいます…</div>
-      <p class="small">背景地図の下で「調査分類群」と「調査者名」を設定してから、現在地または地図上の地点で観察記録を開始してください。「完了」で自動保存します。</p>
+  <main id="map" aria-label="観察記録の地図"></main>
 
-      <h2>背景地図</h2>
-      <select id="basemap" aria-label="背景地図">
-        <option value="standard">標準地図</option>
-        <option value="pale">淡色地図</option>
-        <option value="aerial">航空写真・衛星画像</option>
-      </select>
-      <p id="photoInfo" class="small">ズーム範囲：4～18</p>
+  <section class="floating-panel top-right" aria-label="地図操作">
+    <div class="panel-inner controls-stack">
+      <div>
+        <label class="overlay-label" for="basemap">地図切替</label>
+        <select id="basemap" aria-label="背景地図">
+          <option value="standard">標準地図</option>
+          <option value="pale">淡色地図</option>
+          <option value="aerial">航空写真・衛星画像</option>
+        </select>
+        <p id="photoInfo" class="small">ズーム範囲：4～18</p>
+      </div>
+      <div>
+        <button id="centerLocation" type="button" class="wide">現在地へ移動</button>
+        <p class="small">現在地を地図の中央に表示します。観察記録は作成しません。</p>
+      </div>
+    </div>
+  </section>
 
-      <section id="surveySettings" aria-label="調査設定">
-        <h2>調査設定</h2>
-        <div class="form-category-header">
-          <label for="surveyGroup">調査分類群 <span class="required">*</span></label>
-          <select id="surveyGroup" required>
-            <option value="">調査分類群を選択してください</option>
-            <option value="鳥類">鳥類</option>
-            <option value="哺乳類・両生類・は虫類">哺乳類・両生類・は虫類</option>
-            <option value="陸上昆虫類">陸上昆虫類</option>
-            <option value="底生動物">底生動物</option>
-          </select>
-          <label for="investigator">調査者名 <span class="required">*</span></label>
-          <input type="text" id="investigator" maxlength="100" placeholder="調査者名を入力" required autocomplete="name">
-          <p id="groupHelp" class="small" aria-live="polite">ここで選んだ分類群に合わせて、記録フォームの項目が切り替わります。</p>
-          <p id="surveySettingsStatus" class="substatus" aria-live="polite">調査開始前に、分類群と調査者名を入力してください。</p>
-        </div>
-      </section>
-
-      <h2>現在地</h2>
-      <button id="centerLocation" type="button" class="wide">現在地を取得して地図の中央に表示</button>
-      <p class="small">位置情報を取得して地図を現在地へ移動します。観察記録は作成しません。</p>
-      <button id="getLocation" type="button" class="wide green" disabled>現在地を取得して観察記録</button>
+  <section class="floating-panel bottom-right" aria-label="入力開始">
+    <div class="panel-inner controls-stack">
+      <button id="getLocation" type="button" class="wide green" disabled>現在地からデータ入力</button>
+      <button id="recordAtMap" type="button" class="wide" disabled>後からデータ入力</button>
       <p id="locationStatus" class="substatus" aria-live="polite">現在地は未取得です。</p>
-
-      <h2>後から記録する（場所を指定）</h2>
-      <button id="recordAtMap" type="button" class="wide" disabled>後から記録する（地図で地点を選択）</button>
-      <p id="mapSelectHint" class="substatus" aria-live="polite">ボタンを押す → 地図上の地点を左クリック → 観察記録を入力して「完了・自動保存」。</p>
+      <p id="mapSelectHint" class="substatus" aria-live="polite">地図上で地点を指定して記録できます。</p>
       <p id="message" class="substatus" aria-live="polite">地図を操作できます。</p>
+    </div>
+  </section>
 
-      <section id="recordPanel" hidden aria-label="観察記録の入力">
-        <h2 id="recordTitle">観察記録を入力</h2>
-        <p id="targetCoordinates" class="small"></p>
-        <p id="targetMesh" class="status" aria-live="polite">二次メッシュコード：--</p>
-        <p class="small">二次メッシュコードは地点の緯度・経度から自動計算され、記録と一緒に保存されます（6桁、約10km四方）。</p>
-        <form id="recordForm">
-          <label>⓪ 観察日時 <span class="required">*</span></label>
-          <p class="small">入力開始時の日時を自動入力。数字は手で修正できます。</p>
-          <div class="date-grid">
-            <div><label for="obsYear">年</label><input type="number" id="obsYear" min="1900" max="2100" required></div>
-            <div><label for="obsMonth">月</label><input type="number" id="obsMonth" min="1" max="12" required></div>
-            <div><label for="obsDay">日</label><input type="number" id="obsDay" min="1" max="31" required></div>
-            <div><label for="obsHour">時</label><input type="number" id="obsHour" min="0" max="23" required></div>
-            <div><label for="obsMinute">分</label><input type="number" id="obsMinute" min="0" max="59" required></div>
+  <section class="floating-panel bottom-left" aria-label="保存とデータ管理">
+    <div class="panel-inner">
+      <div id="saveStatus" class="status pending" role="status" aria-live="polite">保存データを読み込んでいます…</div>
+      <div id="info" style="margin-top:8px;">
+        <div id="coordinates">緯度：-- ／ 経度：--</div>
+        <div id="cursorMesh">二次メッシュコード：--</div>
+        <div id="zoomLevel">ズーム：12</div>
+        <div id="featureCount">登録地物数：0</div>
+      </div>
+      <details style="margin-top:10px;">
+        <summary>データ管理</summary>
+        <div class="details-body">
+          <label for="geojsonFile">GeoJSONの読み込み（自動保存）</label>
+          <input type="file" id="geojsonFile" accept=".json,.geojson,application/geo+json,application/json" disabled>
+
+          <label style="margin-top:12px;">保存形式</label>
+          <div class="export-choices" role="group" aria-label="保存形式">
+            <label for="exportJSON"><input type="checkbox" id="exportJSON" checked>JSON <small>（GeoJSON形式・.json）</small></label>
+            <label for="exportXLSX"><input type="checkbox" id="exportXLSX">スプレッドシート <small>（Excel・.xlsx）</small></label>
           </div>
-          <label for="species">① 種名（カタカナ） <span class="required">*</span></label>
-          <div class="species-field">
-            <input type="text" id="species" placeholder="例：しじ／しじゅ（ひらがなで検索）"
-                   autocomplete="off" autocapitalize="off" spellcheck="false"
-                   lang="ja" inputmode="text" role="combobox"
-                   aria-autocomplete="list" aria-expanded="false"
-                   aria-controls="speciesSuggestions" required>
-            <div id="speciesSuggestions" role="listbox" aria-label="種名候補" hidden></div>
-          </div>
-          <div id="birdSpeciesTools" hidden>
-          <p class="small">鳥類のみ：ひらがなのまま入力可能。<b>先頭2文字から候補表示</b>し、3文字目以降で絞り込みます。GoogleシートH列の候補から選択できます。</p>
+          <button id="exportData" type="button" class="wide" disabled>チェックした形式をダウンロード</button>
+          <button id="clearData" type="button" class="wide red" disabled>登録データをすべて削除</button>
+          <p class="small">データはこのブラウザのIndexedDBに自動保存されます。必要に応じて書き出してバックアップしてください。</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section id="recordPanel" class="floating-panel" hidden aria-label="観察記録の入力">
+    <div class="panel-inner">
+      <h2 id="recordTitle">観察記録を入力</h2>
+      <p id="targetCoordinates" class="small"></p>
+      <p id="targetMesh" class="status" aria-live="polite">二次メッシュコード：--</p>
+      <p class="small">二次メッシュコードは地点の緯度・経度から自動計算され、記録と一緒に保存されます（6桁、約10km四方）。</p>
+      <form id="recordForm">
+        <label for="surveyGroup">調査分類群 <span class="required">*</span></label>
+        <select id="surveyGroup" required>
+          <option value="">調査分類群を選択してください</option>
+          <option value="鳥類">鳥類</option>
+          <option value="哺乳類・両生類・は虫類">哺乳類・両生類・は虫類</option>
+          <option value="陸上昆虫類">陸上昆虫類</option>
+          <option value="底生動物">底生動物</option>
+        </select>
+
+        <label for="investigator">調査者名 <span class="required">*</span></label>
+        <input type="text" id="investigator" maxlength="100" placeholder="調査者名を入力" required autocomplete="name">
+        <p id="groupHelp" class="small">分類群を選択すると、その分類群の記録項目が表示されます。</p>
+
+        <label>⓪ 観察日時 <span class="required">*</span></label>
+        <p class="small">入力開始時の日時を自動入力。数字は手で修正できます。</p>
+        <div class="date-grid">
+          <div><label for="obsYear">年</label><input type="number" id="obsYear" min="1900" max="2100" required></div>
+          <div><label for="obsMonth">月</label><input type="number" id="obsMonth" min="1" max="12" required></div>
+          <div><label for="obsDay">日</label><input type="number" id="obsDay" min="1" max="31" required></div>
+          <div><label for="obsHour">時</label><input type="number" id="obsHour" min="0" max="23" required></div>
+          <div><label for="obsMinute">分</label><input type="number" id="obsMinute" min="0" max="59" required></div>
+        </div>
+
+        <label for="species">① 種名（カタカナ） <span class="required">*</span></label>
+        <div class="species-field">
+          <input type="text" id="species" placeholder="例：しじ／しじゅ（ひらがなで検索）"
+                 autocomplete="off" autocapitalize="off" spellcheck="false"
+                 lang="ja" inputmode="text" role="combobox"
+                 aria-autocomplete="list" aria-expanded="false"
+                 aria-controls="speciesSuggestions" required>
+          <div id="speciesSuggestions" role="listbox" aria-label="種名候補" hidden></div>
+        </div>
+        <div id="birdSpeciesTools" hidden>
+          <p id="speciesSearchHelp" class="small">ひらがなのまま入力可能。<b>先頭2文字から候補表示</b>し、3文字目以降で絞り込みます。</p>
           <p id="speciesSourceStatus" class="substatus" aria-live="polite">種名候補を読み込んでいます…</p>
           <button id="reloadSpecies" type="button">種名候補を再取得</button>
           <div class="species-file-fallback">
             <label for="speciesLocalFile">シートに接続できない場合：Excel・CSVから候補を読み込む</label>
             <input id="speciesLocalFile" type="file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
-            <p class="small">指定シートの「ファイル」→「ダウンロード」で保存した<strong>シート全体</strong>を選択。H列だけを候補に登録します。読み込んだ候補は次回も使えます。</p>
+            <p id="speciesFileHint" class="small">指定シート全体をExcel・CSV形式で保存し、ファイルを選択してください。使用列だけ読み込みます。</p>
           </div>
-          <p class="small">候補の出典：<a href="https://docs.google.com/spreadsheets/d/1ryxMzvuOzTx19FNbf3RugnrSm_RGxEhsnk6lkmtJ2wQ/edit?gid=0#gid=0" target="_blank" rel="noopener noreferrer">指定GoogleスプレッドシートのH列（gid=0）</a></p>
-          </div><!-- /birdSpeciesTools -->
-          <label for="individuals">② 個体数（数字） <span class="required">*</span></label>
-          <input type="number" id="individuals" min="1" step="1" value="1" required>
-          <div id="birdDetails" hidden>
+          <p class="small">候補の出典：<a id="speciesSourceLink" href="https://docs.google.com/spreadsheets/d/1ryxMzvuOzTx19FNbf3RugnrSm_RGxEhsnk6lkmtJ2wQ/edit?gid=0#gid=0" target="_blank" rel="noopener noreferrer">鳥類：指定GoogleスプレッドシートのH列</a></p>
+        </div>
+
+        <label for="individuals">② 個体数（数字） <span class="required">*</span></label>
+        <input type="number" id="individuals" min="1" step="1" value="1" required>
+
+        <div id="birdDetails" hidden>
           <label id="ageLabel">③ 年齢（チェック式・複数選択可） <span class="required">*</span></label>
           <div class="checks" role="group" aria-labelledby="ageLabel">
             <label><input type="checkbox" name="age" value="成鳥">成鳥</label>
@@ -238,44 +262,16 @@
           <label for="notes">⑧ 備考（テキスト） <span id="notesRequired" class="required" hidden>*</span></label>
           <textarea id="notes" rows="3" placeholder="観察状況、行動など。『その他』を選んだ場合は入力必須です"></textarea>
           <p id="notesHint" class="small">備考は任意です。繁殖行動・確認方法の「その他」を選んだ場合のみ必須になります。</p>
-          </div><!-- /birdDetails -->
-          <p id="formValidationMessage" class="status error" aria-live="polite" hidden></p>
-          <div class="buttons">
-            <button id="submitRecord" type="submit" class="green">完了・自動保存</button>
-            <button id="cancelRecord" type="button" class="grey">キャンセル</button>
-          </div>
-        </form>
-      </section>
+        </div>
 
-      <h2>GISデータ</h2>
-      <label for="geojsonFile">GeoJSONの読み込み（自動保存）</label>
-      <input type="file" id="geojsonFile" accept=".json,.geojson,application/geo+json,application/json" disabled>
-      <h2>データのエクスポート</h2>
-      <p class="small">保存形式をチェックしてください（両方選択できます）。</p>
-      <div class="export-choices" role="group" aria-label="保存形式">
-        <label for="exportJSON"><input type="checkbox" id="exportJSON" checked>JSON <small>（GeoJSON形式・.json）</small></label>
-        <label for="exportXLSX"><input type="checkbox" id="exportXLSX">スプレッドシート <small>（Excel・.xlsx）</small></label>
-      </div>
-      <button id="exportData" type="button" class="wide" disabled>チェックした形式をダウンロード</button>
-      <p class="small">両方をチェックした場合は、JSONとExcelを1つのZIPにまとめます。ダウンロード先はブラウザ設定に従います（通常はダウンロードフォルダ）。Excel・ZIP出力にはインターネット接続が必要です。</p>
-      <button id="clearData" type="button" class="wide red" disabled>登録データをすべて削除</button>
-      <p class="small">※データはこのブラウザのIndexedDBに保存されます。別の端末・ブラウザとは自動共有されません。閲覧データを削除すると失われる場合があるため、必要に応じてGeoJSONをバックアップしてください。</p>
-
-      <h2>地図情報</h2>
-      <div id="info">
-        <div id="coordinates">緯度：-- ／ 経度：--</div>
-        <div id="cursorMesh">二次メッシュコード：--</div>
-        <div id="zoomLevel">ズーム：12</div>
-        <div id="featureCount">登録地物数：0</div>
-      </div>
-
-      <h2>出典</h2>
-      <p class="small">地図・写真：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener noreferrer">国土地理院（地理院タイル一覧）</a></p>
-      <p class="small">衛星画像：データソース：Landsat8画像（GSI,TSIC,GEO Grid/AIST）, Landsat8画像（courtesy of the U.S. Geological Survey）, 海底地形（GEBCO）</p>
-      <p class="small">Shoreline data is derived from: United States. National Imagery and Mapping Agency. “Vector Map Level 0 (VMAP0).” Bethesda, MD: Denver, CO: The Agency; USGS Information Services, 1997.</p>
+        <p id="formValidationMessage" class="status error" aria-live="polite" hidden></p>
+        <div class="buttons">
+          <button id="submitRecord" type="submit" class="green">完了・自動保存</button>
+          <button id="cancelRecord" type="button" class="grey">キャンセル</button>
+        </div>
+      </form>
     </div>
-  </aside>
-  <main id="map" aria-label="観察記録の地図"></main>
+  </section>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <!-- Excel (.xlsx) ファイルの生成に使用 -->
@@ -539,16 +535,37 @@ async function persistAndRender(item) {
 
 
 // ===========================================================
-// 種名補完：指定Googleスプレッドシート（gid=0）のH列だけを利用
-//   先頭2文字以上で前方一致検索。3文字目以降はさらに絞り込み。クリック/Enterで確定。
-//   ブラウザからOSの日本語IMEを強制変更することは不可能なため、
-//   検索キーだけひらがな→カタカナに変換。入力欄は書き換えない。
+// 種名補完：鳥類は旧シートH列、その他3分類群は新シートAA列。
+// ひらがな/カタカナの先頭2文字以上で前方一致。入力欄自体は書き換えない。
+// 分類群ごとに候補を別キャッシュし、読み込み中の切替にも対応。
 // ===========================================================
-const SPECIES_SHEET_ID = "1ryxMzvuOzTx19FNbf3RugnrSm_RGxEhsnk6lkmtJ2wQ";
-const SPECIES_H_COLUMN_URL =
-  "https://docs.google.com/spreadsheets/d/" + SPECIES_SHEET_ID +
-  "/gviz/tq?gid=0&range=H%3AH&headers=0&tqx=out%3Ajson";
-const SPECIES_CACHE_KEY = "wildlife_species_candidates_H_gid0_v1";
+const SPECIES_SOURCES = Object.freeze({
+  bird: Object.freeze({
+    key: "bird", id: "1ryxMzvuOzTx19FNbf3RugnrSm_RGxEhsnk6lkmtJ2wQ",
+    gid: "0", column: "H", index: 7,
+    cacheKey: "wildlife_species_candidates_H_gid0_v1"
+  }),
+  other: Object.freeze({
+    key: "other", id: "1csGhbrwXZtJb9gKwsopRGTstvWW_sRcBxDCXwttfanY",
+    gid: "1963017732", column: "AA", index: 26,
+    cacheKey: "wildlife_species_candidates_AA_gid1963017732_v1"
+  })
+});
+function getSpeciesSource() {
+  const group = document.getElementById("surveyGroup").value;
+  if (!group) return null;
+  return group === "鳥類" ? SPECIES_SOURCES.bird : SPECIES_SOURCES.other;
+}
+function speciesUrl(source, callback=null) {
+  const url = new URL(`https://docs.google.com/spreadsheets/d/${source.id}/gviz/tq`);
+  url.searchParams.set("gid",source.gid);
+  url.searchParams.set("range",`${source.column}:${source.column}`);
+  url.searchParams.set("headers","0");
+  url.searchParams.set("tqx",callback ? "out:json;responseHandler:"+callback : "out:json");
+  return url;
+}
+let activeSpeciesKey = null;
+let speciesLoadingKey = null;
 const speciesInputField = document.getElementById("species");
 const speciesBox = document.getElementById("speciesSuggestions");
 const speciesSourceStatus = document.getElementById("speciesSourceStatus");
@@ -657,7 +674,7 @@ function updateActiveSpecies(index) {
   speciesBox.children[activeSpeciesIndex]?.scrollIntoView({block:"nearest"});
 }
 function refreshSpeciesSuggestions() {
-  if (document.getElementById("surveyGroup").value !== "鳥類") {
+  if (!getSpeciesSource()) {
     setSpeciesListOpen(false); return;
   }
   if (speciesComposing || document.activeElement !== speciesInputField) {
@@ -689,32 +706,34 @@ function refreshSpeciesSuggestions() {
   const hasResults = visibleSpeciesCandidates.length > 0;
   speciesBox.hidden = !hasResults;
   speciesInputField.setAttribute("aria-expanded",String(hasResults));
+  const column = getSpeciesSource()?.column || "";
   if (!hasResults) {
-    speciesSourceStatus.textContent = "H列の候補" + speciesCandidates.length + "件を読み込み済み。入力に一致する種名はありません（手入力可能）。";
+    speciesSourceStatus.textContent = column + "列の候補" + speciesCandidates.length + "件を読み込み済み。入力に一致する種名はありません（手入力可能）。";
   } else if (!speciesFetchFailed) {
-    speciesSourceStatus.textContent = "H列の候補から先頭一致で" + matches.length + "件該当（最大15件を表示）。";
+    speciesSourceStatus.textContent = column + "列の候補から先頭一致で" + matches.length + "件該当（最大15件を表示）。";
   }
 }
-function setSpeciesFromCache() {
+function setSpeciesFromCache(source=getSpeciesSource()) {
+  if (!source) return;
   try {
-    const raw = localStorage.getItem(SPECIES_CACHE_KEY);
+    const raw = localStorage.getItem(source.cacheKey);
     if (!raw) return;
     const data = JSON.parse(raw);
     if (!Array.isArray(data.values) || !data.values.length) return;
     speciesCandidates = data.values.filter(v => typeof v === "string");
-    speciesSourceStatus.textContent = "前回取得したH列の候補"+speciesCandidates.length+"件を利用できます。最新データを確認中…";
+    speciesSourceStatus.textContent = "前回取得した"+source.column+"列の候補"+speciesCandidates.length+"件を利用できます。最新データを確認中…";
   } catch (_) {}
 }
 // 公開されているGoogleシートのJSON形式を解釈する。
-// range=H:H に限定して取得するので行の先頭セルがH列。
+// range=H:H または AA:AA に限定して取得するので行の先頭セルが対象列。
 function normalizeCandidateValues(values) {
   return [...new Set(values.map(value => toKatakana(String(value ?? "").trim()))
-    .filter(value => value && !["種名", "和名", "H", "種名（カタカナ）"].includes(value)))];
+    .filter(value => value && !["種名", "和名", "H", "AA", "種名（カタカナ）"].includes(value)))];
 }
 function extractSpeciesFromGvizData(result) {
   if (result?.status !== "ok" || !Array.isArray(result?.table?.rows)) {
     const details = result?.errors?.map(e => e.detailed_message || e.message).filter(Boolean).join(" / ");
-    throw new Error(details || "H列を読み取れません。Googleシートの閲覧権限を確認してください。");
+    throw new Error(details || "指定列を読み取れません。Googleシートの閲覧権限を確認してください。");
   }
   return normalizeCandidateValues(result.table.rows.map(row => {
     const cell = row?.c?.[0];
@@ -732,9 +751,9 @@ function extractSpeciesFromGviz(responseText) {
 // Google Visualization APIの responseHandler をscriptタグで受け取る方式に切り替える。
 // Googleから提供されるJSONPに限って使用し、不特定の外部サイトは経由しない。
 let speciesJsonpSeq = 0;
-function loadSpeciesByScript() {
+function loadSpeciesByScript(source) {
   return new Promise((resolve,reject) => {
-    const callback = "webgisSpeciesHResponse" + (++speciesJsonpSeq);
+    const callback = "webgisSpeciesResponse" + (++speciesJsonpSeq);
     const script = document.createElement("script");
     let done = false;
     let timer;
@@ -752,60 +771,83 @@ function loadSpeciesByScript() {
     };
     script.onerror = () => finish(new Error("Googleシートの読み込みが拒否されました（共有権限またはネットワークを確認）。"));
     timer = setTimeout(() => finish(new Error("Googleシートへの接続がタイムアウトしました。")), 14000);
-    const url = new URL("https://docs.google.com/spreadsheets/d/" + SPECIES_SHEET_ID + "/gviz/tq");
-    url.searchParams.set("gid", "0");
-    url.searchParams.set("range", "H:H");
-    url.searchParams.set("headers", "0");
-    url.searchParams.set("tqx", "out:json;responseHandler:" + callback);
+    const url = speciesUrl(source,callback);
     url.searchParams.set("_", String(Date.now()));
     script.src = url.toString();
     document.head.appendChild(script);
   });
 }
 
-function installSpeciesCandidates(names, source) {
+function installSpeciesCandidates(names, sourceLabel, source=getSpeciesSource()) {
+  if (!source) return;
   const cleaned = normalizeCandidateValues(names);
-  if (!cleaned.length) throw new Error("H列に種名が見つかりません。ファイル全体（A～H列を含む）をご確認ください。");
+  if (!cleaned.length) throw new Error(source.column+"列に種名が見つかりません。シート全体（A～"+source.column+"列）を確認してください。");
+  try {
+    localStorage.setItem(source.cacheKey, JSON.stringify({values:cleaned,loadedAt:Date.now(),source:sourceLabel}));
+  } catch (_) {}
+  // 非同期リクエスト完了前に分類群が変更された場合、別分類群に混在させない。
+  if (activeSpeciesKey !== source.key) return;
   speciesCandidates = cleaned;
   speciesSheetLoaded = true;
   speciesFetchFailed = false;
-  try {
-    localStorage.setItem(SPECIES_CACHE_KEY, JSON.stringify({values:cleaned,loadedAt:Date.now(),source}));
-  } catch (_) {}
-  speciesSourceStatus.textContent = source + "から種名" + cleaned.length + "件を取得しました。ひらがな・カタカナの先頭2文字から候補を表示し、3文字目以降で絞り込みます。";
+  speciesSourceStatus.textContent = sourceLabel + "から種名" + cleaned.length + "件を取得しました。ひらがな・カタカナの先頭2文字から候補を表示し、3文字目以降で絞り込みます。";
   refreshSpeciesSuggestions();
 }
 
 async function loadSpeciesFromSheet(force=false) {
-  if (speciesLoadingPromise) return speciesLoadingPromise;
+  const source = getSpeciesSource();
+  if (!source) return;
+  if (speciesLoadingPromise && speciesLoadingKey === source.key) return speciesLoadingPromise;
   if (speciesSheetLoaded && !force) return;
   speciesFetchFailed = false;
-  speciesSourceStatus.textContent = "指定GoogleスプレッドシートのH列に接続しています…";
-  speciesLoadingPromise = (async () => {
+  speciesSourceStatus.textContent = `指定Googleスプレッドシートの${source.column}列に接続しています…`;
+  const request = (async () => {
     try {
       let names;
       if (location.protocol !== "file:") {
         try {
-          const response = await fetch(SPECIES_H_COLUMN_URL, {cache:"no-store"});
+          const response = await fetch(speciesUrl(source).toString(), {cache:"no-store"});
           if (!response.ok) throw new Error("HTTP " + response.status);
           names = extractSpeciesFromGviz(await response.text());
         } catch (_) {
-          // fetchが拒否された場合のCORS回避策
-          names = await loadSpeciesByScript();
+          // fetchのCORS制約がある場合はGoogle Visualization APIのJSONPで再試行。
+          names = await loadSpeciesByScript(source);
         }
       } else {
-        names = await loadSpeciesByScript();
+        names = await loadSpeciesByScript(source);
       }
-      installSpeciesCandidates(names,"指定シートH列（オンライン）");
+      installSpeciesCandidates(names,`指定シート${source.column}列（オンライン）`,source);
     } catch (error) {
+      if (activeSpeciesKey !== source.key) return;
       speciesFetchFailed = true;
       const explanation = "Googleシートから取得できません（" + error.message + "）。";
       speciesSourceStatus.textContent = speciesCandidates.length
         ? explanation + " 保存済み候補" + speciesCandidates.length + "件を使用します。"
-        : explanation + "「リンクを知っている全員・閲覧者」の設定、または下のExcel・CSVファイルの読み込みが必要です。";
+        : explanation + "閲覧権限を確認するか、下のExcel・CSVファイルを読み込んでください。";
     }
   })();
-  try { await speciesLoadingPromise; } finally { speciesLoadingPromise = null; }
+  speciesLoadingPromise = request;
+  speciesLoadingKey = source.key;
+  try { await request; }
+  finally {
+    if (speciesLoadingPromise === request) {
+      speciesLoadingPromise = null;
+      speciesLoadingKey = null;
+    }
+  }
+}
+
+function activateSpeciesSource() {
+  const source = getSpeciesSource();
+  const nextKey = source?.key ?? null;
+  if (activeSpeciesKey === nextKey) return;
+  activeSpeciesKey = nextKey;
+  speciesCandidates = [];
+  speciesSheetLoaded = false;
+  speciesFetchFailed = false;
+  setSpeciesListOpen(false);
+  if (!source) return;
+  setSpeciesFromCache(source);
 }
 
 // GoogleシートのCSVを「シート全体」でダウンロードした場合のH列だけを利用する。
@@ -842,12 +884,15 @@ document.getElementById("speciesLocalFile").addEventListener("change", async fun
       if (!window.XLSX) throw new Error("Excel読込に必要なライブラリを読み込めません。CSV形式で保存して再試行してください。");
       const book = XLSX.read(await file.arrayBuffer(),{type:"array"});
       if (!book.SheetNames.length) throw new Error("Excelにシートがありません。");
-      // Googleシートのgid=0に相当するタブを含めて書き出したファイルの先頭シートを利用。
+      // CSV・Excelいずれも対象列の位置はA列始まりで数える。
       rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]],{header:1,defval:"",raw:false});
     } else {
       throw new Error(".xlsx、.xls、.csvのいずれかを選択してください。");
     }
-    installSpeciesCandidates(rows.map(row => row[7] ?? ""),"ローカルファイルのH列");
+    const source = getSpeciesSource();
+    if (!source) throw new Error("先に調査分類群を選択してください。");
+    installSpeciesCandidates(rows.map(row => row[source.index] ?? ""),
+      "ローカルファイルの"+source.column+"列",source);
   } catch (error) {
     speciesSourceStatus.textContent = "ファイルから読み込めませんでした：" + error.message;
   } finally {
@@ -856,7 +901,7 @@ document.getElementById("speciesLocalFile").addEventListener("change", async fun
 });
 
 speciesInputField.addEventListener("focus", () => {
-  if (document.getElementById("surveyGroup").value === "鳥類" && !speciesSheetLoaded) void loadSpeciesFromSheet();
+  if (getSpeciesSource() && !speciesSheetLoaded) void loadSpeciesFromSheet();
   refreshSpeciesSuggestions();
 });
 speciesInputField.addEventListener("compositionstart", () => {
@@ -889,42 +934,35 @@ speciesInputField.addEventListener("blur", () => {
   setTimeout(() => setSpeciesListOpen(false), 120);
 });
 document.getElementById("reloadSpecies").addEventListener("click", () => void loadSpeciesFromSheet(true));
-setSpeciesFromCache();
-// 候補は鳥類を選択した時に限りオンラインで取得します。
+// 調査分類群が選ばれてから対応するシートを読み込む。
 
 // ===========================================================
-// 調査分類群別のフォーム。鳥類だけ詳細項目とH列候補を表示。
+// 調査分類群別のフォーム。鳥類だけ詳細項目を表示。
+// 種名候補は鳥類H列、それ以外はAA列を表示。
 // ===========================================================
 const surveyGroupSelect = document.getElementById("surveyGroup");
 const investigatorInput = document.getElementById("investigator");
-const surveySettingsStatus = document.getElementById("surveySettingsStatus");
-// 調査設定はフォームの外に置き、連続登録時にも選択内容を維持する。
 let surveySettingsBeforeEdit = null;
-function ensureSurveySettings() {
-  if (!surveyGroupSelect.value) {
-    surveySettingsStatus.textContent = "調査分類群を選択してください。";
-    surveySettingsStatus.style.color = "#b93131";
-    surveyGroupSelect.scrollIntoView({behavior:"smooth",block:"center"});
-    surveyGroupSelect.focus();
-    return false;
+const SURVEY_DEFAULTS_KEY = "wildlife_observation_survey_defaults_v1";
+function loadSurveyDefaults() {
+  try {
+    const raw = localStorage.getItem(SURVEY_DEFAULTS_KEY);
+    if (!raw) return {group:"", investigator:""};
+    const parsed = JSON.parse(raw);
+    return {
+      group: typeof parsed.group === "string" ? parsed.group : "",
+      investigator: typeof parsed.investigator === "string" ? parsed.investigator : ""
+    };
+  } catch {
+    return {group:"", investigator:""};
   }
-  if (!investigatorInput.value.trim()) {
-    surveySettingsStatus.textContent = "調査者名を入力してください。";
-    surveySettingsStatus.style.color = "#b93131";
-    investigatorInput.scrollIntoView({behavior:"smooth",block:"center"});
-    investigatorInput.focus();
-    return false;
-  }
-  surveySettingsStatus.textContent = "調査設定済み：" + surveyGroupSelect.value + "／" + investigatorInput.value.trim();
-  surveySettingsStatus.style.color = "";
-  return true;
 }
-investigatorInput.addEventListener("input", () => {
-  if (surveyGroupSelect.value && investigatorInput.value.trim()) {
-    surveySettingsStatus.textContent = "調査設定済み：" + surveyGroupSelect.value + "／" + investigatorInput.value.trim();
-    surveySettingsStatus.style.color = "";
-  }
-});
+function saveSurveyDefaults(group, investigator) {
+  try {
+    localStorage.setItem(SURVEY_DEFAULTS_KEY, JSON.stringify({group, investigator}));
+  } catch {}
+}
+let lastSurveyDefaults = loadSurveyDefaults();
 const birdDetails = document.getElementById("birdDetails");
 const birdSpeciesTools = document.getElementById("birdSpeciesTools");
 const notesInput = document.getElementById("notes");
@@ -972,28 +1010,33 @@ function updateClassificationUI() {
   const group = surveyGroupSelect.value;
   const isBird = isBirdSurvey();
   birdDetails.hidden = !isBird;
-  birdSpeciesTools.hidden = !isBird;
-  if (!isBird) setSpeciesListOpen(false);
-  speciesInputField.placeholder = isBird
-    ? "例：しじ（ひらがなで候補検索）"
-    : "種名を入力（候補検索なし）";
+  birdSpeciesTools.hidden = !group;
+  activateSpeciesSource();
+  const source = getSpeciesSource();
+  speciesInputField.placeholder = "例：しじ（ひらがな2文字で候補検索）";
   document.getElementById("groupHelp").textContent = !group
     ? "分類群を選択すると、その分類群の記録項目が表示されます。"
     : isBird
-      ? "鳥類：年齢・性別・環境・繁殖行動・確認方法も入力必須。種名はH列の候補を検索できます。"
-      : "この分類群では、種名・個体数・観察日時・調査者名を記録します。種名候補は表示しません。";
+      ? "鳥類：詳細な記録項目を入力します。種名はH列で候補を検索できます。"
+      : "この分類群では、種名・個体数・観察日時・調査者名を記録します。種名はAA列で候補を検索できます。";
+  if (source) {
+    document.getElementById("speciesSearchHelp").innerHTML =
+      "ひらがな・カタカナの<b>先頭2文字</b>から候補を表示し、3文字目以降で絞り込みます。"+
+      " Googleスプレッドシートの<b>"+source.column+"列</b>を使用します。";
+    document.getElementById("speciesFileHint").textContent =
+      "指定シート全体をExcel・CSVで保存し、ファイルを選択すると"+source.column+"列だけを候補に登録します。読み込んだ候補は次回も使えます。";
+    const link = document.getElementById("speciesSourceLink");
+    link.href = `https://docs.google.com/spreadsheets/d/${source.id}/edit?gid=${source.gid}#gid=${source.gid}`;
+    link.textContent = "指定Googleスプレッドシートの"+source.column+"列（gid="+source.gid+"）";
+  }
   updateNotesRequirement();
   resetValidationError();
-  if (isBird && !speciesSheetLoaded) void loadSpeciesFromSheet();
+  if (source && !speciesSheetLoaded) void loadSpeciesFromSheet();
 }
 surveyGroupSelect.addEventListener("change", () => {
   speciesInputField.value = "";
   speciesInputField.setCustomValidity("");
   updateClassificationUI();
-  if (surveyGroupSelect.value && investigatorInput.value.trim()) {
-    surveySettingsStatus.textContent = "調査設定済み：" + surveyGroupSelect.value + "／" + investigatorInput.value.trim();
-    surveySettingsStatus.style.color = "";
-  }
 });
 for (const name of ["breeding", "confirmation"]) {
   document.querySelectorAll('input[name="' + name + '"]').forEach(box => {
@@ -1034,10 +1077,9 @@ function closeRecordForm() {
   pendingPoint = null;
   editingId = null;
   recordForm.reset();
-  // 編集中に切り替えた設定を戻し、次の新規記録には編集前の設定を使う。
+  // 編集中に切り替えた設定は既定値へ戻す。
   if (surveySettingsBeforeEdit) {
-    surveyGroupSelect.value = surveySettingsBeforeEdit.group;
-    investigatorInput.value = surveySettingsBeforeEdit.investigator;
+    lastSurveyDefaults = {...surveySettingsBeforeEdit};
     surveySettingsBeforeEdit = null;
   }
   updateClassificationUI();
@@ -1056,13 +1098,17 @@ function displayForm() {
   if (Number.isFinite(pendingPoint.accuracy) && pendingPoint.accuracy > 0) {
     L.circle([lat,lng],{radius:pendingPoint.accuracy,color:"#1678c6",weight:1,fillOpacity:.08,interactive:false}).addTo(previewGroup);
   }
-  recordPanel.scrollIntoView({block:"nearest",behavior:"smooth"});
+  setTimeout(() => {
+    (editingId ? document.getElementById("species") : surveyGroupSelect).focus();
+  }, 60);
 }
 function openNewForm(latlng, method, accuracy=null) {
   if (!database) { setStatus("自動保存が利用できないため登録できません。","error"); return; }
   closeRecordForm();
   recordForm.reset();
   setDateInputs(new Date());
+  surveyGroupSelect.value = lastSurveyDefaults.group || "";
+  investigatorInput.value = lastSurveyDefaults.investigator || "";
   updateClassificationUI();
   editingId = null;
   pendingPoint = {coordinates:[latlng.lng,latlng.lat],method,accuracy};
@@ -1091,10 +1137,7 @@ function openEditForm(id) {
   if (!item || item.feature.geometry?.type !== "Point") return;
   closeRecordForm();
   recordForm.reset();
-  surveySettingsBeforeEdit = {
-    group: surveyGroupSelect.value,
-    investigator: investigatorInput.value
-  };
+  surveySettingsBeforeEdit = {...lastSurveyDefaults};
   editingId = id;
   const props = item.feature.properties || {};
   const [lng,lat] = item.feature.geometry.coordinates;
@@ -1183,6 +1226,8 @@ recordForm.addEventListener("submit", async event => {
     showFormError("『その他』を選択した場合は備考を必ず入力してください。", notesInput);
     return;
   }
+  lastSurveyDefaults = {group: classification, investigator};
+  saveSurveyDefaults(classification, investigator);
   const previous = editingId ? records.get(editingId) : null;
   const properties = {
     ...(previous?.feature.properties || {}),
@@ -1254,7 +1299,6 @@ document.querySelectorAll('input[name="sex"]').forEach(box => {
 // ===========================================================
 function requestCurrentLocation(startRecord) {
   if (geolocationBusy) return;
-  if (startRecord && !ensureSurveySettings()) return;
   if (startRecord && !database) {
     locationStatus.textContent = "自動保存を利用できないため観察記録を開始できません。";
     return;
@@ -1336,7 +1380,6 @@ recordAtMapButton.addEventListener("click", () => {
     message.textContent = "地図での地点指定をキャンセルしました。";
     return;
   }
-  if (!ensureSurveySettings()) return;
   // 入力中の記録を意図せず失わないよう確認する
   if (!recordPanel.hidden) {
     if (!confirm("入力中のフォームを閉じて、別の地点を指定しますか？")) return;
