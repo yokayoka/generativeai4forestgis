@@ -12,8 +12,8 @@
 
 ## 構成
 
-- `index.html`: 参加者ページの一覧
-- `participants/pNN/`: 参加者ごとの公開ページ(`p01`〜`p24` の24人分)
+- `index.html`: 成果物の一覧
+- `participants/pNN/`: 参加者ごとの公開ページ(成果物を提出した参加者分)
 - `tools/sync_from_drive.ps1`: Google Drive の作業フォルダーを反映するスクリプト
 
 氏名やメールアドレスはこのリポジトリに置きません。ID と氏名の対応は運営が非公開で管理します。
