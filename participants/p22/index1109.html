@@ -1,0 +1,3273 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>野生生物観察 WebGIS v31｜GeoTIFFの3D地形貼り付け</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+    <style>
+    :root {
+      --green:#197452; --dark:#152b26; --muted:#61746e; --light:#f4f7f5; --border:#dbe5df;
+      --red:#b93131; --panel:#ffffffee; --shadow:0 10px 24px rgba(21,43,38,.18);
+    }
+    * { box-sizing:border-box; }
+    html, body { margin:0; height:100%; }
+    body {
+      font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;
+      color:var(--dark); background:#e6eee9;
+    }
+    #app { position:relative; width:100vw; height:100vh; height:100dvh; overflow:hidden; }
+    #map { position:absolute; inset:0; background:#e6eee9; z-index:1; }
+    .floating-panel {
+      position:absolute; z-index:1000; background:var(--panel); backdrop-filter:blur(6px);
+      border:1px solid rgba(180,198,189,.95); border-radius:12px; box-shadow:var(--shadow);
+    }
+    .panel-inner { padding:12px; }
+    /* 上部のパネルはラジオとボタンの内容に合わせて縮める */
+    .top-right { top:12px; right:12px; width:max-content; max-width:calc(100vw - 24px); }
+    /* 右下は文字の幅に合わせて縮める */
+    .bottom-right { right:12px; bottom:12px; width:min(225px, calc(100vw - 24px)); }
+    .bottom-left { left:12px; bottom:12px; width:min(220px, calc(100vw - 24px)); max-height:calc(100dvh - 24px); overflow:auto; }
+    .bottom-left.expanded { width:min(350px, calc(100vw - 24px)); z-index:1150; }
+    #featureCount { font-size:14px; font-weight:700; color:var(--dark); line-height:1.4; }
+    #saveStatus { margin-bottom:8px; }
+    #recordPanel {
+      left:12px; bottom:12px; width:min(344px, calc(100vw - 24px));
+      max-height:calc(100dvh - 24px); overflow:auto; z-index:1200;
+      background:#fff; border:2px solid var(--green);
+    }
+    /* 入力ポップアップ：幅・縦方向の間隔を従来の約80%にする */
+    #recordPanel .panel-inner { padding:10px; }
+    #recordPanel label { margin:8px 0 5px; }
+    #recordPanel .small { margin:5px 0; line-height:1.4; }
+    #recordPanel .date-grid { gap:4px; }
+    #recordPanel .date-grid label { margin:6px 0 3px; }
+    #recordPanel .checks { padding:6px 8px; }
+    #recordPanel .checks label { margin:6px 0; }
+    #recordPanel .buttons { margin-top:6px; gap:6px; }
+    #recordPanel .status { padding:8px 10px; }
+    #recordPanel #speciesSuggestions .species-option { padding:7px 9px; }
+    /* 地点選択中は指定の一文だけ表示する */
+    .bottom-right.selecting-mode #locationStatus,
+    .bottom-right.selecting-mode #message { display:none !important; }
+    [hidden] { display:none !important; }
+    h2 { font-size:15px; margin:0 0 10px; }
+    h3 { font-size:14px; margin:0 0 8px; }
+    label { display:block; font-size:13px; font-weight:650; margin:10px 0 6px; }
+    input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+      width:100%; min-width:0; padding:10px 9px; border-radius:7px; border:1px solid #b8cac0;
+      background:#fff; color:var(--dark); font:inherit; font-size:14px;
+    }
+    input:focus, select:focus, textarea:focus { outline:2px solid #91c9ad; outline-offset:1px; }
+    textarea { resize:vertical; }
+    button {
+      border:0; border-radius:8px; padding:10px 12px; background:#2368a0; color:#fff;
+      font-size:14px; font-weight:700; cursor:pointer;
+    }
+    button:hover:not(:disabled) { filter:brightness(.95); }
+    button:disabled { cursor:wait; opacity:.6; }
+    .wide { display:block; width:100%; margin:8px 0; }
+    .green { background:var(--green); }
+    .red { background:var(--red); }
+    .grey { background:#63716c; }
+    #centerLocation { display:block; width:max-content; max-width:100%; margin:7px 0 0; padding:7px 1em; font-size:12px; line-height:1.3; white-space:nowrap; }
+    /* 文字の左右に約1文字分だけの余白を取る */
+    #getLocation, #recordAtMap {
+      display:block; width:max-content; max-width:100%; padding:10px 1em;
+      margin:6px auto; white-space:normal; text-align:center;
+      font-size:14px; line-height:1.35;
+    }
+    .classified-marker { background:none; border:0; }
+    .classified-marker svg { display:block; filter:drop-shadow(0 2px 2px rgba(0,0,0,.36)); }
+    .map-radio-options { display:flex; flex-direction:column; gap:5px; margin:2px 0 7px; }
+    .map-radio-options label { display:flex; align-items:center; gap:6px; margin:0; font-size:12px; font-weight:500; cursor:pointer; line-height:1.35; }
+    .map-radio-options input[type="radio"] { flex:0 0 auto; width:16px; height:16px; margin:0; accent-color:#2368a0; }
+    .top-right .panel-inner { padding:9px 10px; }
+    .small { font-size:12px; line-height:1.6; color:var(--muted); margin:6px 0; }
+    .substatus { font-size:12px; line-height:1.55; color:var(--muted); margin:6px 0; overflow-wrap:anywhere; }
+    .status { padding:10px 12px; border-radius:8px; background:#e3f2e9; color:#185c3e; font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+    .status.error { background:#fff0f0; color:#981f1f; }
+    .status.pending { background:#fff4db; color:#795512; }
+    .overlay-label { display:block; margin:0 0 6px; font-size:12px; font-weight:700; color:#264238; }
+    .controls-stack > * + * { margin-top:8px; }
+    .mini-heading { font-size:11px; font-weight:700; color:#35564b; letter-spacing:.04em; margin:0 0 6px; text-transform:uppercase; }
+    .date-grid { display:grid; grid-template-columns:1.6fr repeat(4,1fr); gap:5px; }
+    .date-grid label { font-size:11px; text-align:center; margin-bottom:4px; }
+    .date-grid input { padding:8px 3px !important; text-align:center; }
+    .checks { padding:8px 10px; border-radius:7px; background:#f2f6f3; }
+    .checks label { display:flex; align-items:center; gap:8px; margin:8px 0; font-size:13px; font-weight:500; }
+    .checks input { width:18px; height:18px; accent-color:var(--green); }
+    .export-choices { display:flex; flex-direction:column; gap:6px; padding:10px 12px; margin:8px 0; background:#fff; border:1px solid var(--border); border-radius:7px; }
+    .export-choices label { display:flex; align-items:center; gap:10px; margin:0; padding:5px 2px; cursor:pointer; font-size:13px; }
+    .export-choices input { width:19px; height:19px; accent-color:var(--green); }
+    .export-choices small { color:var(--muted); font-weight:400; }
+    .species-field { position:relative; }
+    #speciesSuggestions {
+      position:absolute; z-index:1800; top:calc(100% + 3px); left:0; right:0; max-height:238px; overflow-y:auto;
+      padding:4px; border:1px solid #abc5ba; border-radius:8px; background:#fff; box-shadow:0 6px 18px #152b2633;
+    }
+    .species-option { display:block; width:100%; margin:0; padding:9px 11px; border:0; border-radius:5px; background:#fff; color:var(--dark); text-align:left; font-size:14px; font-weight:500; cursor:pointer; }
+    .species-option:hover, .species-option.active { background:#dbefe3; color:#124c34; }
+    #speciesSourceStatus { min-height:20px; }
+    .species-file-fallback { margin:9px 0; padding:9px; border:1px solid #bed3c9; border-radius:7px; background:#f8faf9; }
+    .species-file-fallback label { margin:0 0 6px; font-weight:600; }
+    .species-file-fallback input[type=file] { padding:5px; font-size:12px; }
+    #reloadSpecies { display:inline-block; width:auto; margin:4px 0; padding:4px 8px; font-size:11px; font-weight:500; background:#64746b; }
+    .required { color:#ba3030; }
+    .checks.missing-group { border:2px solid var(--red); }
+    .buttons { display:flex; gap:8px; margin-top:8px; }
+    .buttons button { flex:1; }
+    #info { font-size:12px; line-height:1.8; }
+    details summary { cursor:pointer; font-size:13px; font-weight:700; margin:0; }
+    details .details-body { margin-top:8px; }
+    .popup-content { line-height:1.7; max-height:300px; overflow-y:auto; }
+    .popup-content .row { border-bottom:1px solid #edf1ed; padding:2px 0; overflow-wrap:anywhere; }
+    .popup-content .field-label { font-weight:700; }
+    .popup-actions { display:flex; gap:6px; margin-top:9px; }
+    .popup-actions button { padding:7px 12px; font-size:12px; }
+    #map.choosing-point, #map.choosing-point.leaflet-grab, #map.choosing-point.leaflet-dragging { cursor:crosshair !important; }
+    #map.choosing-point .leaflet-interactive { cursor:crosshair !important; }
+    #mapSelectHint.active { color:#185c3e; font-weight:700; }
+    #mapSelectHint:empty, #message:empty { display:none; }
+    .leaflet-popup-content { min-width:190px; }
+    .leaflet-control-attribution { font-size:10px; }
+    @media (max-width: 720px) {
+      .top-right { width:max-content; max-width:calc(100vw - 20px); top:10px; right:10px; }
+      .bottom-right, .bottom-left { bottom:10px; }
+      .bottom-right { right:10px; width:min(60vw, 225px); }
+      .bottom-right .panel-inner { padding:8px; }
+      #getLocation, #recordAtMap { font-size:13px; padding:9px 1em; }
+      .bottom-left { left:10px; width:min(32vw,140px); max-height:calc(100dvh - 20px); }
+      .bottom-left .panel-inner { padding:8px; }
+      #featureCount { font-size:12px; }
+      .bottom-left.expanded { width:min(350px, calc(100vw - 20px)); max-height:75dvh; }
+      #recordPanel { left:10px; right:auto; width:min(344px, calc(100vw - 20px)); bottom:10px; max-height:calc(100dvh - 20px); }
+      .panel-inner { padding:10px; }
+      .buttons { flex-direction:column; }
+    }
+
+    /* 鳥類：年齢・性別を左右2列にし高さを節約する */
+    .bird-age-sex-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; align-items:start; }
+    .bird-age-sex-col { min-width:0; }
+    #recordPanel .bird-age-sex-col > label { font-size:12px; line-height:1.35; min-height:33px; }
+    #recordPanel .bird-age-sex-col .checks { padding:4px 6px; }
+    #recordPanel .bird-age-sex-col .checks label { gap:5px; margin:5px 0; font-size:12px; white-space:nowrap; }
+    #recordPanel .bird-age-sex-col .checks input { width:17px; height:17px; margin:0; }
+    .photo-import-box { margin:11px 0 4px; padding:9px; background:#f2f6f3; border:1px solid var(--border); border-radius:8px; }
+    #photoInput { padding:7px 5px; font-size:12px; }
+    .photo-actions { display:flex; flex-wrap:wrap; gap:7px; margin:8px 0; }
+    #clearPhotoSelection { padding:8px 10px; font-size:12px; background:#747d7a; }
+    #photoFolderStatus, #photoSelectionStatus, #photoExistingStatus { overflow-wrap:anywhere; }
+    #selectedPhotoList { margin:5px 0 8px; padding-left:20px; font-size:12px; line-height:1.55; }
+    #selectedPhotoList li { margin-bottom:5px; overflow-wrap:anywhere; }
+    .remove-selected-photo { padding:3px 7px; margin-left:6px; font-size:11px; background:#b14b4b; }
+
+    /* 写真のドラッグ＆ドロップ・フォルダの記憶 */
+    .photo-drop-zone {
+      border:2px dashed #83a99b; border-radius:9px; background:#fff;
+      padding:15px 8px; text-align:center; cursor:pointer; margin:8px 0;
+      line-height:1.6; color:#2b5949; font-size:13px; font-weight:600;
+      transition:background .15s, border-color .15s;
+    }
+    .photo-drop-zone.drag-over, .photo-drop-zone:focus-visible {
+      border-color:#167a52; background:#dff4e7; outline:2px solid #167a52;
+    }
+    #photoSourceFolderStatus { overflow-wrap:anywhere; }
+    .photo-folder-note { font-size:11px; color:var(--muted); }
+    @media (max-width:370px) {
+      #recordPanel .bird-age-sex-col > label { font-size:11px; }
+      .bird-age-sex-grid { gap:5px; }
+    }
+
+    /* 地図重ね合わせ：折りたためる操作欄 */
+    #overlayDetails { margin-top:9px; padding-top:7px; border-top:1px solid var(--border); font-size:12px; }
+    #overlayDetails summary { padding:4px 0; font-size:12px; font-weight:700; cursor:pointer; }
+    #overlayDetails[open] { width:min(258px, calc(100vw - 44px)); }
+    #overlayDetails .overlay-body { padding:7px 0 2px; }
+    #overlayDetails label { margin:7px 0 4px; font-size:12px; }
+    #overlayDetails input:not([type="checkbox"]),
+    #overlayDetails select { padding:7px 8px; font-size:12px; }
+    #overlayDetails button { padding:7px 8px; font-size:12px; }
+    #overlayDetails .small { font-size:11px; line-height:1.4; }
+    #overlayDropZone {
+      margin:5px 0 8px; border:2px dashed #8aaa9d; border-radius:9px; padding:12px 7px;
+      text-align:center; cursor:pointer; background:#f8fbf9; color:#285448; line-height:1.55;
+    }
+    #overlayDropZone.drag-over, #overlayDropZone:focus-visible {
+      background:#e0f1e8; border-color:#197452; outline:2px solid #8ac9ac;
+    }
+    #overlayList { max-height:195px; overflow-y:auto; margin-top:6px; }
+    .overlay-row { background:#f5f8f6; border:1px solid #d8e4dd; border-radius:8px; padding:7px; margin:6px 0; }
+    .overlay-row-head { display:flex; align-items:center; gap:4px; }
+    .overlay-row-head label { margin:0 !important; flex:1; display:flex; align-items:center; gap:4px; min-width:0; font-size:12px; font-weight:600; }
+    .overlay-row-head label span { overflow-wrap:anywhere; }
+    .overlay-row-head input { accent-color:#197452; }
+    .overlay-row-head button { flex:none; padding:4px 7px !important; font-size:11px !important; }
+    .overlay-row-sub { display:flex; align-items:center; gap:6px; margin-top:7px; }
+    .overlay-row-sub input { width:100%; accent-color:#197452; }
+    .overlay-row-sub span { flex:none; font-size:11px; color:#61746e; }
+    #overlayStatus { margin:6px 0; font-size:11px; color:#41675b; line-height:1.4; overflow-wrap:anywhere; }
+    #overlayStatus.overlay-error { color:#a32929; }
+    .overlay-actions { display:flex; gap:5px; }
+    .overlay-actions button { flex:1; }
+    @media (max-width:720px) {
+      #overlayDetails[open] { width:min(244px, calc(100vw - 44px)); }
+      .top-right:has(#overlayDetails[open]) { max-height:calc(100dvh - 28px); overflow-y:auto; }
+    }
+
+    /* DEM1A 3Dマップは既存のLeaflet地図の上に切替表示 */
+    #map3d { position:absolute; inset:0; z-index:2; background:#e3eae5; }
+    #map3d[hidden] { display:none !important; }
+    #app.terrain-on #map { visibility:hidden; }
+    .terrain-toggle-row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:5px 0 0; border-top:1px solid #dce7e1; margin-top:7px; }
+    .terrain-toggle-row .terrain-label { font-size:12px; font-weight:700; color:#315849; }
+    .terrain-switch { position:relative; display:inline-block; width:41px; height:24px; flex:none; cursor:pointer; }
+    .terrain-switch input { position:absolute; opacity:0; width:100%; height:100%; inset:0; margin:0; cursor:pointer; }
+    .terrain-slider { position:absolute; inset:0; background:#aab7b0; border-radius:15px; transition:background .2s; pointer-events:none; }
+    .terrain-slider::before { content:""; position:absolute; background:white; width:18px; height:18px; left:3px; top:3px; border-radius:50%; transition:transform .2s; box-shadow:0 1px 3px #0003; }
+    .terrain-switch input:checked + .terrain-slider { background:#197452; }
+    .terrain-switch input:checked + .terrain-slider::before { transform:translateX(17px); }
+    .terrain-switch input:focus-visible + .terrain-slider { outline:2px solid #146e52; outline-offset:3px; }
+    .terrain-status { margin:4px 0 0; font-size:10px; line-height:1.35; color:#466354; max-width:205px; overflow-wrap:anywhere; }
+    .terrain-status.error { color:#b93131; }
+    #map3d.choosing-point, #map3d.choosing-point * { cursor:crosshair !important; }
+    #map3d .maplibregl-ctrl-top-right { top:145px; }
+    @media(max-width:720px){#map3d .maplibregl-ctrl-top-right {top:135px;}}
+
+    /* 3D出典：地図・標高提供者を明示。2D中は非表示。 */
+    #terrainCredits {
+      position:absolute; z-index:1100; right:4px; bottom:3px; max-width:min(90vw,760px);
+      padding:3px 6px; border-radius:4px; background:#fffffff2;
+      font-size:10px; line-height:1.35; color:#3a4742; text-align:right; overflow-wrap:anywhere;
+      box-shadow:0 1px 3px #0002;
+    }
+    #terrainCredits a { color:#246596; text-decoration:none; }
+    #terrainCredits[hidden] { display:none !important; }
+
+    #terrainCredits { pointer-events:auto; }
+    #app.terrain-on .bottom-right, #app.terrain-on .bottom-left { bottom:27px; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <main id="map" aria-label="観察記録の地図"></main>
+  <div id="map3d" hidden aria-label="国土地理院1m DEMによる3D地形地図"></div>
+  <div id="terrainCredits" hidden role="note" aria-label="3D表示の出典">
+    <a href="https://maplibre.org/" target="_blank" rel="noopener noreferrer">MapLibre GL JS</a> ｜
+    <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener noreferrer">国土地理院（地図部）</a> ｜
+    <span id="terrainDemCredits">国土地理院（DEM1A・1mメッシュ）</span><span id="terrainOverlayCredits"></span>
+  </div>
+
+  <section class="floating-panel top-right" aria-label="地図操作">
+    <div class="panel-inner">
+      <div class="overlay-label" id="basemapLabel">地図切替</div>
+      <div class="map-radio-options" role="radiogroup" aria-labelledby="basemapLabel">
+        <label><input type="radio" name="basemap" value="standard" checked>標準地図</label>
+        <label><input type="radio" name="basemap" value="pale">淡色地図</label>
+        <label><input type="radio" name="basemap" value="aerial">写真</label>
+      </div>
+      <div class="terrain-toggle-row">
+        <span class="terrain-label" id="terrainSwitchLabel">3D（1m DEM）</span>
+        <label class="terrain-switch" aria-label="3D地形のオン・オフ">
+          <input id="terrainSwitch" type="checkbox" role="switch" aria-labelledby="terrainSwitchLabel" aria-checked="false">
+          <span class="terrain-slider" aria-hidden="true"></span>
+        </label>
+      </div>
+      <p id="terrainStatus" class="terrain-status" role="status" aria-live="polite" hidden></p>
+<button id="centerLocation" type="button">現在地へ移動</button>
+      <details id="overlayDetails" aria-label="重ねる地図">
+        <summary>重ねる地図を追加 ＋</summary>
+        <div class="overlay-body">
+          <div id="overlayDropZone" tabindex="0" role="button" aria-label="GeoJSONまたはGeoTIFFを選択">
+            地図ファイルをクリックまたは<br>ドラッグ＆ドロップ
+            <div class="small">.geojson / .json / .tif / .tiff</div>
+          </div>
+          <input id="overlayFileInput" type="file" multiple accept=".geojson,.json,.tif,.tiff,application/geo+json,application/json,image/tiff" hidden>
+          <label for="overlayUrlType">リンクの種類</label>
+          <select id="overlayUrlType">
+            <option value="xyz">XYZタイル（{z}/{x}/{y}）</option>
+            <option value="wms">WMS地図サービス</option>
+            <option value="geojson-url">GeoJSONのURL</option>
+            <option value="geotiff-url">GeoTIFFのURL</option>
+          </select>
+          <label for="overlayUrl">地図のURL</label>
+          <input id="overlayUrl" type="url" placeholder="https://..." autocomplete="url" inputmode="url">
+          <div id="overlayWmsOptions" hidden>
+            <label for="overlayWmsLayers">WMSレイヤー名（必須）</label>
+            <input id="overlayWmsLayers" type="text" placeholder="例：vegetation">
+          </div>
+          <label for="overlayName">表示名（任意）</label>
+          <input id="overlayName" type="text" maxlength="100" placeholder="例：植生図・樹種ポリゴン">
+          <button type="button" id="overlayAddUrl" class="wide">URLから追加</button>
+          <p id="overlayStatus" role="status" aria-live="polite">地図データは観察記録とは別に表示します。</p>
+          <p id="overlay3DStatus" class="small" role="status" aria-live="polite" hidden></p>
+          <div id="overlayList" aria-label="追加したレイヤー一覧"></div>
+          <p class="small">追加した地図は、表示切替・透明度変更・削除ができます。GeoTIFFは位置情報付きの画像に対応します。<br><strong>現在、位置合わせ済みGeoTIFFは、3D表示時もDEM1Aの起伏に沿って貼り付けます。大量のラスタ画像は端末により表示に時間がかかります。</strong></p>
+        </div>
+      </details>
+
+    </div>
+  </section>
+
+  <section class="floating-panel bottom-right" aria-label="入力開始">
+    <div class="panel-inner controls-stack">
+      <button id="getLocation" type="button" class="wide green" disabled>現在地からデータ入力</button>
+      <button id="recordAtMap" type="button" class="wide" disabled>場所を選んでデータ入力</button>
+      <p id="locationStatus" class="substatus" aria-live="polite">現在地は未取得です。</p>
+      <p id="mapSelectHint" class="substatus" aria-live="polite"></p>
+      <p id="message" class="substatus" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section class="floating-panel bottom-left" aria-label="保存とデータ管理">
+    <div class="panel-inner">
+      <!-- 通常の自動保存メッセージは隠す。保存エラー時のみ表示する。 -->
+      <div id="saveStatus" class="status pending" role="status" aria-live="polite" hidden></div>
+      <div id="info">
+        <div id="coordinates" hidden>緯度：-- ／ 経度：--</div>
+        <div id="cursorMesh" hidden>二次メッシュコード：--</div>
+        <div id="zoomLevel" hidden>ズーム：12</div>
+        <div id="featureCount">登録地物数：0</div>
+      </div>
+      <details id="dataManagement" style="margin-top:10px;">
+        <summary>データ管理</summary>
+        <div class="details-body">
+          <label for="geojsonFile">GeoJSONの読み込み（自動保存）</label>
+          <input type="file" id="geojsonFile" accept=".json,.geojson,application/geo+json,application/json" disabled>
+
+          <label style="margin-top:12px;">保存形式</label>
+          <div class="export-choices" role="group" aria-label="保存形式">
+            <label for="exportJSON"><input type="checkbox" id="exportJSON" checked>JSON <small>（GeoJSON形式・.json）</small></label>
+            <label for="exportXLSX"><input type="checkbox" id="exportXLSX">スプレッドシート <small>（Excel・.xlsx）</small></label>
+          </div>
+          <button id="exportData" type="button" class="wide" disabled>チェックした形式をダウンロード</button>
+          <p class="small">Excelの「写真のアドレス」は指定した写真保存先フォルダを基準にした相対パス（例：./写真名.jpg）です。ブラウザからPCの絶対パスは取得できません。</p>
+          <button id="clearData" type="button" class="wide red" disabled>登録データをすべて削除</button>
+          <p class="small">データはこのブラウザのIndexedDBに自動保存されます。必要に応じて書き出してバックアップしてください。</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section id="recordPanel" class="floating-panel" hidden aria-label="観察記録の入力">
+    <div class="panel-inner">
+      <h2 id="recordTitle">観察記録を入力</h2>
+      <p id="targetCoordinates" class="small"></p>
+      <p id="targetMesh" class="status" aria-live="polite">二次メッシュコード：--</p>
+      <p class="small">二次メッシュコードは地点の緯度・経度から自動計算され、記録と一緒に保存されます（6桁、約10km四方）。</p>
+      <form id="recordForm">
+        <label for="surveyGroup">調査分類群 <span class="required">*</span></label>
+        <select id="surveyGroup" required>
+          <option value="">調査分類群を選択してください</option>
+          <option value="鳥類">鳥類</option>
+          <option value="魚類">魚類</option>
+          <option value="植物">植物</option>
+          <option value="哺乳類">哺乳類</option>
+          <option value="両生類">両生類</option>
+          <option value="爬虫類">爬虫類</option>
+          <option value="陸上昆虫類">陸上昆虫類</option>
+          <option value="底生動物">底生動物</option>
+          <!-- 過去データの編集時だけ選択値を復元するため旧名称を保持 -->
+          <option value="哺乳類・両生類・は虫類" hidden>哺乳類・両生類・は虫類（旧記録）</option>
+        </select>
+
+        <label for="investigator">調査者名 <span class="required">*</span></label>
+        <input type="text" id="investigator" maxlength="100" placeholder="調査者名を入力" required autocomplete="name">
+        <p id="groupHelp" class="small">分類群を選択すると、その分類群の記録項目が表示されます。</p>
+
+        <label>⓪ 観察日時 <span class="required">*</span></label>
+        <p class="small">入力開始時の日時を自動入力。数字は手で修正できます。</p>
+        <div class="date-grid">
+          <div><label for="obsYear">年</label><input type="number" id="obsYear" min="1900" max="2100" required></div>
+          <div><label for="obsMonth">月</label><input type="number" id="obsMonth" min="1" max="12" required></div>
+          <div><label for="obsDay">日</label><input type="number" id="obsDay" min="1" max="31" required></div>
+          <div><label for="obsHour">時</label><input type="number" id="obsHour" min="0" max="23" required></div>
+          <div><label for="obsMinute">分</label><input type="number" id="obsMinute" min="0" max="59" required></div>
+        </div>
+
+        <label for="species">① 種名（カタカナ） <span class="required">*</span></label>
+        <div class="species-field">
+          <input type="text" id="species" placeholder="例：しじ／しじゅ（ひらがなで検索）"
+                 autocomplete="off" autocapitalize="off" spellcheck="false"
+                 lang="ja" inputmode="text" role="combobox"
+                 aria-autocomplete="list" aria-expanded="false"
+                 aria-controls="speciesSuggestions" required>
+          <div id="speciesSuggestions" role="listbox" aria-label="種名候補" hidden></div>
+        </div>
+        <div id="birdSpeciesTools" hidden>
+          <p id="speciesSearchHelp" class="small">ひらがなのまま入力可能。<b>先頭2文字から候補表示</b>し、3文字目以降で絞り込みます。</p>
+          <p id="speciesSourceStatus" class="substatus" aria-live="polite">種名候補を読み込んでいます…</p>
+          <button id="reloadSpecies" type="button">種名候補を再取得</button>
+          <div class="species-file-fallback">
+            <label for="speciesLocalFile">シートに接続できない場合：Excel・CSVから候補を読み込む</label>
+            <input id="speciesLocalFile" type="file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+            <p id="speciesFileHint" class="small">指定シート全体をExcel・CSV形式で保存し、ファイルを選択してください。使用列だけ読み込みます。</p>
+          </div>
+          <p class="small">候補の出典：<a id="speciesSourceLink" href="https://docs.google.com/spreadsheets/d/1ryxMzvuOzTx19FNbf3RugnrSm_RGxEhsnk6lkmtJ2wQ/edit?gid=0#gid=0" target="_blank" rel="noopener noreferrer">鳥類：指定GoogleスプレッドシートのH列</a></p>
+        </div>
+
+        <label for="individuals">② 個体数（数字） <span class="required">*</span></label>
+        <input type="number" id="individuals" min="1" step="1" value="1" required>
+
+        <div id="birdDetails" hidden>
+          <div class="bird-age-sex-grid">
+            <div class="bird-age-sex-col">
+              <label id="ageLabel">③ 年齢 <span class="required">*</span><br>（複数選択可）</label>
+              <div class="checks" role="group" aria-labelledby="ageLabel">
+                <label><input type="checkbox" name="age" value="成鳥">成鳥</label>
+                <label><input type="checkbox" name="age" value="幼鳥">幼鳥</label>
+                <label><input type="checkbox" name="age" value="ヒナ">ヒナ</label>
+              </div>
+            </div>
+            <div class="bird-age-sex-col">
+              <label id="sexLabel">④ 性別 <span class="required">*</span><br>（複数選択可）</label>
+              <div class="checks" role="group" aria-labelledby="sexLabel">
+                <label><input type="checkbox" name="sex" value="オス">オス</label>
+                <label><input type="checkbox" name="sex" value="メス">メス</label>
+                <label><input type="checkbox" name="sex" value="不明">不明</label>
+              </div>
+            </div>
+          </div>
+          <label id="environmentLabel">⑤ 環境選択（複数選択可） <span class="required">*</span></label>
+          <div class="checks" role="group" aria-labelledby="environmentLabel">
+            <label><input type="checkbox" name="environment" value="針葉樹林">針葉樹林</label>
+            <label><input type="checkbox" name="environment" value="落葉広葉樹林">落葉広葉樹林</label>
+            <label><input type="checkbox" name="environment" value="常緑広葉樹林">常緑広葉樹林</label>
+          </div>
+          <label id="confirmationLabel">⑥ 確認方法（チェック式・複数選択可） <span class="required">*</span></label>
+          <div class="checks" role="group" aria-labelledby="confirmationLabel">
+            <label><input type="checkbox" name="confirmation" value="目視">目視</label>
+            <label><input type="checkbox" name="confirmation" value="さえずり">さえずり</label>
+            <label><input type="checkbox" name="confirmation" value="地鳴き">地鳴き</label>
+            <label><input type="checkbox" name="confirmation" value="その他">その他</label>
+          </div>
+          <label id="breedingLabel">⑦ 繁殖行動（チェック式・複数選択可） <span class="required">*</span></label>
+          <div class="checks" role="group" aria-labelledby="breedingLabel">
+            <label><input type="checkbox" name="breeding" value="なし">なし</label>
+            <label><input type="checkbox" name="breeding" value="餌運搬">餌運搬</label>
+            <label><input type="checkbox" name="breeding" value="巣材運搬">巣材運搬</label>
+            <label><input type="checkbox" name="breeding" value="巣">巣</label>
+            <label><input type="checkbox" name="breeding" value="異種攻撃">異種攻撃</label>
+            <label><input type="checkbox" name="breeding" value="同種攻撃">同種攻撃</label>
+            <label><input type="checkbox" name="breeding" value="その他">その他</label>
+          </div>
+          <label for="notes">⑧ 備考（テキスト） <span id="notesRequired" class="required" hidden>*</span></label>
+          <textarea id="notes" rows="3" placeholder="観察状況、行動など。『その他』を選んだ場合は入力必須です"></textarea>
+          <p id="notesHint" class="small">備考は任意です。繁殖行動・確認方法の「その他」を選んだ場合のみ必須になります。</p>
+        </div>
+
+
+        <!-- 写真：分類群に関係なくフォームの最後に表示。任意入力。 -->
+        <section class="photo-import-box" aria-label="写真をインポート">
+          <label>⑨ 写真のインポート（任意・複数選択可）</label>
+          <div id="photoDropZone" class="photo-drop-zone" tabindex="0" role="button"
+               aria-label="写真をドラッグして追加、またはクリックしてファイル選択">
+            写真をここにドラッグ＆ドロップ<br>
+            またはクリックして写真を選択
+          </div>
+          <input type="file" id="photoInput" multiple hidden
+                 accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.tif,.tiff,.gif,.bmp">
+          <p id="photoSourceFolderStatus" class="small" aria-live="polite" hidden></p>
+          <p id="photoExistingStatus" class="small" hidden></p>
+          <p id="photoSelectionStatus" class="small">写真を選択していません。</p>
+          <ol id="selectedPhotoList" hidden></ol>
+          <div class="photo-actions">
+            <button id="clearPhotoSelection" type="button" disabled>選択した写真をキャンセル</button>
+          </div>
+          <p class="small photo-folder-note">初回の「完了」で写真保存先を選びます（HTMLと同じフォルダ）。次回以降は再利用します。</p>
+          <p id="photoFolderStatus" class="small" aria-live="polite" hidden></p>
+          <p class="small">複数選択時は自動で「_01」「_02」…と枝番を付けます。元ファイルは変更しません。保存先と選択元のフォルダはそれぞれ別に記憶します。</p>
+        </section>
+
+        <p id="formValidationMessage" class="status error" aria-live="polite" hidden></p>
+        <div class="buttons">
+          <button id="submitRecord" type="submit" class="green">完了・自動保存</button>
+          <button id="cancelRecord" type="button" class="grey">キャンセル</button>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Excel (.xlsx) ファイルの生成に使用 -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<!-- 両形式同時選択時に一つのZIPファイルにまとめる -->
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+"use strict";
+
+// ===========================================================
+// 1. 国土地理院の地図：ズーム4～18
+//    衛星画像4～13／航空写真14～18
+// ===========================================================
+const map = L.map("map", {center:[35.681236,139.767125], zoom:12, minZoom:4, maxZoom:18});
+const credit = '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener noreferrer">国土地理院</a>';
+const satCredit = 'Landsat8画像（GSI,TSIC,GEO Grid/AIST）, Landsat8画像（courtesy of the U.S. Geological Survey）, 海底地形（GEBCO）';
+const standard = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png", {minZoom:4,maxZoom:18,attribution:credit});
+const pale = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", {minZoom:4,maxZoom:18,attribution:credit});
+const satellite = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/lndst/{z}/{x}/{y}.png", {minZoom:4,maxZoom:13,attribution:credit+' | '+satCredit});
+const photo = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg", {minZoom:14,maxZoom:18,attribution:credit});
+const basemaps = {standard, pale, aerial:L.layerGroup([satellite,photo])};
+let activeBasemap = standard.addTo(map);
+// ラジオボタンから背景地図を即時切り替え（地図の中心・ズームを維持）
+document.querySelectorAll('input[name="basemap"]').forEach(radio => {
+  radio.addEventListener("change", () => {
+    if (!radio.checked) return;
+    map.removeLayer(activeBasemap);
+    activeBasemap = basemaps[radio.value].addTo(map);
+  });
+});
+map.on("zoomend", () => {
+  document.getElementById("zoomLevel").textContent = "ズーム：" + map.getZoom();
+});
+map.on("mousemove", event => {
+  const lat = event.latlng.lat;
+  const lng = event.latlng.lng;
+  document.getElementById("coordinates").textContent =
+    "緯度："+lat.toFixed(6)+" ／ 経度："+lng.toFixed(6);
+  document.getElementById("cursorMesh").textContent =
+    "二次メッシュコード："+(secondMeshCode(lat,lng) ?? "算出範囲外");
+});
+L.control.scale({metric:true,imperial:false}).addTo(map);
+
+// ===========================================================
+// 2. 標準地域メッシュ（第2次地域区画：約10km四方・6桁）
+// JIS X 0410 の標準地域メッシュの区画ルールを使用。
+// 一次区画：緯度40分・経度1度、二次区画：それぞれ8等分。
+// ===========================================================
+function secondMeshCode(lat, lng) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) ||
+      lat < 0 || lat >= 66.6666666667 || lng < 100 || lng >= 180) {
+    return null;
+  }
+  const lat40 = Math.floor(lat * 1.5);
+  const lonDegrees = Math.floor(lng);
+  const lon1 = lonDegrees - 100;
+  const lat5 = Math.min(7, Math.max(0, Math.floor((lat * 1.5 - lat40) * 8 + 1e-11)));
+  const lon75 = Math.min(7, Math.max(0, Math.floor((lng - lonDegrees) * 8 + 1e-11)));
+  return lat40 * 10000 + lon1 * 100 + lat5 * 10 + lon75;
+}
+
+function meshCodeForFeature(feature) {
+  if (feature?.geometry?.type !== "Point") return null;
+  const coordinates = feature.geometry.coordinates;
+  if (!Array.isArray(coordinates) || coordinates.length < 2) return null;
+  return secondMeshCode(Number(coordinates[1]), Number(coordinates[0]));
+}
+
+// 元のGeoJSONを変更せずに不要な情報を消さず、メッシュコードを補完する。
+// この処理は既存データの復元時と外部GeoJSONの取り込み時にも使用。
+function fillFeatureMesh(feature) {
+  if (feature?.geometry?.type !== "Point") return false;
+  const code = meshCodeForFeature(feature);
+  if (!feature.properties || typeof feature.properties !== "object" || Array.isArray(feature.properties)) {
+    feature.properties = {};
+  }
+  if (feature.properties["二次メッシュコード"] === code) return false;
+  feature.properties["二次メッシュコード"] = code;
+  return true;
+}
+
+// ===========================================================
+// 3. 自動保存用 IndexedDB（ボタン完了ごとに書き込み）
+// ===========================================================
+const DB_NAME = "wildlife_observation_webgis_db";
+// バージョン指定はしない。旧HTML(v1)・写真版(v2)を同じブラウザで
+// 開いている場合でも、不要なDB更新待ちで入力ボタンが無効にならないようにする。
+// 旧版と同じデータベース名・featuresストアを維持する。
+const PHOTO_PREF_DB_NAME = "wildlife_webgis_photo_preferences";
+const STORE_NAME = "features";
+const SETTINGS_STORE_NAME = "preferences";
+let database = null;
+const records = new Map();
+const renderedLayers = new Map();
+const featureGroup = L.featureGroup().addTo(map);
+const previewGroup = L.layerGroup().addTo(map);
+let pendingPoint = null;
+let editingId = null;
+let busy = false;
+
+const dataManagement = document.getElementById("dataManagement");
+dataManagement.addEventListener("toggle", () => {
+  document.querySelector(".bottom-left").classList.toggle("expanded", dataManagement.open);
+});
+const saveStatus = document.getElementById("saveStatus");
+const message = document.getElementById("message");
+const recordPanel = document.getElementById("recordPanel");
+const recordForm = document.getElementById("recordForm");
+const submitButton = document.getElementById("submitRecord");
+const locationButton = document.getElementById("getLocation");
+const centerLocationButton = document.getElementById("centerLocation");
+const locationStatus = document.getElementById("locationStatus");
+const currentLocationGroup = L.layerGroup().addTo(map);
+let geolocationBusy = false;
+
+function setStatus(text, kind="good") {
+  saveStatus.className = "status" + (kind === "error" ? " error" : kind === "pending" ? " pending" : "");
+  saveStatus.textContent = text;
+  // 通常の保存成功・処理中表示は省略。エラーだけ左下に残す。
+  saveStatus.hidden = kind !== "error";
+}
+function requireDatabase() {
+  if (!database) throw new Error("保存用データベースが利用できません。HTTPSまたはlocalhostで開いてください。");
+}
+function openDatabase() {
+  return new Promise((resolve,reject) => {
+    if (!window.indexedDB) { reject(new Error("このブラウザはIndexedDBに対応していません。")); return; }
+    const request = indexedDB.open(DB_NAME);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME, {keyPath:"id"});
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("データベースを開けません。"));
+    request.onblocked = () => reject(new Error("別のタブでデータベースの更新が妨げられています。"));
+  });
+}
+function getStoredRecords() {
+  requireDatabase();
+  return new Promise((resolve,reject) => {
+    const tx = database.transaction(STORE_NAME,"readonly");
+    const request = tx.objectStore(STORE_NAME).getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("読み込みエラー"));
+  });
+}
+function putStoredRecords(items) {
+  requireDatabase();
+  return new Promise((resolve,reject) => {
+    const tx = database.transaction(STORE_NAME,"readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    for (const item of items) store.put(item);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error("保存エラー"));
+    tx.onabort = () => reject(tx.error || new Error("保存中断"));
+  });
+}
+function deleteStoredRecord(id) {
+  requireDatabase();
+  return new Promise((resolve,reject) => {
+    const tx = database.transaction(STORE_NAME,"readwrite");
+    tx.objectStore(STORE_NAME).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error("削除エラー"));
+    tx.onabort = () => reject(tx.error || new Error("削除中断"));
+  });
+}
+function clearStoredRecords() {
+  requireDatabase();
+  return new Promise((resolve,reject) => {
+    const tx = database.transaction(STORE_NAME,"readwrite");
+    tx.objectStore(STORE_NAME).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error("削除エラー"));
+    tx.onabort = () => reject(tx.error || new Error("削除中断"));
+  });
+}
+
+// 旧版(v1)にない写真保存先ストアを追加するために、観察記録DBの
+// バージョンを上げると既存タブとの競合で画面全体が起動不能になる。
+// 保存先の設定だけ別の小さなDBに置き、旧写真版(v2)の設定も引き継ぐ。
+function openPhotoPreferencesDatabase() {
+  return new Promise((resolve,reject) => {
+    const req = indexedDB.open(PHOTO_PREF_DB_NAME,1);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(SETTINGS_STORE_NAME)) {
+        req.result.createObjectStore(SETTINGS_STORE_NAME,{keyPath:"key"});
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error("保存先設定を開けません。"));
+    req.onblocked = () => reject(new Error("保存先設定が別のタブで使用中です。"));
+  });
+}
+function getPreferenceFrom(db,key) {
+  return new Promise((resolve,reject) => {
+    const request = db.transaction(SETTINGS_STORE_NAME,"readonly")
+      .objectStore(SETTINGS_STORE_NAME).get(key);
+    request.onsuccess = () => resolve(request.result?.value ?? null);
+    request.onerror = () => reject(request.error || new Error("設定を取得できません。"));
+  });
+}
+function putPreferenceTo(db,key,value) {
+  return new Promise((resolve,reject) => {
+    const tx = db.transaction(SETTINGS_STORE_NAME,"readwrite");
+    tx.objectStore(SETTINGS_STORE_NAME).put({key,value});
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error("設定を保存できません。"));
+    tx.onabort = () => reject(tx.error || new Error("設定の保存が中断されました。"));
+  });
+}
+async function getStoredPreference(key) {
+  requireDatabase();
+  // v23ですでに保存した設定がある場合は、その値を優先して引き継ぐ。
+  if (database.objectStoreNames.contains(SETTINGS_STORE_NAME)) {
+    const older = await getPreferenceFrom(database,key);
+    if (older !== null) return older;
+  }
+  const prefs = await openPhotoPreferencesDatabase();
+  try { return await getPreferenceFrom(prefs,key); }
+  finally { prefs.close(); }
+}
+async function putStoredPreference(key,value) {
+  requireDatabase();
+  const prefs = await openPhotoPreferencesDatabase();
+  try { await putPreferenceTo(prefs,key,value); }
+  finally { prefs.close(); }
+  // v23の旧設定ストアも更新可能なら同期する。失敗しても新DBの値は保存済み。
+  if (database.objectStoreNames.contains(SETTINGS_STORE_NAME)) {
+    try { await putPreferenceTo(database,key,value); } catch (error) { console.warn(error); }
+  }
+}
+
+function newId() {
+  return window.crypto && typeof window.crypto.randomUUID === "function"
+    ? crypto.randomUUID() : "rec-"+Date.now()+"-"+Math.random().toString(36).slice(2);
+}
+function updateCount() {
+  const features = [...records.values()].reduce((total, item) => {
+    const g = item.feature.geometry;
+    return total + (g && g.type === "GeometryCollection" ? g.geometries.length : 1);
+  }, 0);
+  document.getElementById("featureCount").textContent = "登録地物数：" + features;
+}
+function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+}
+
+// ===========================================================
+// 写真の取り込みと安全なコピー保存
+// ファイルシステムへ書き込む前に利用者によるフォルダ選択が必要。
+// IndexedDBには写真本体も紐付けて保存（ブラウザバックアップ）。
+// ===========================================================
+const photoInput = document.getElementById("photoInput");
+const photoDropZone = document.getElementById("photoDropZone");
+const photoSourceFolderStatus = document.getElementById("photoSourceFolderStatus");
+const photoSelectionStatus = document.getElementById("photoSelectionStatus");
+const photoExistingStatus = document.getElementById("photoExistingStatus");
+const selectedPhotoList = document.getElementById("selectedPhotoList");
+const clearPhotoSelectionButton = document.getElementById("clearPhotoSelection");
+const photoFolderStatus = document.getElementById("photoFolderStatus");
+let photoDirectoryHandle = null;
+let photoSourceDirectoryHandle = null;
+let selectedPhotos = [];
+
+function photoFileExtension(file) {
+  const match = String(file.name || "").match(/\.([a-zA-Z0-9]{2,6})$/);
+  if (match) return match[1].toLowerCase();
+  return ({"image/jpeg":"jpg","image/png":"png","image/webp":"webp","image/gif":"gif","image/heic":"heic","image/heif":"heif","image/tiff":"tif"})[file.type] || "jpg";
+}
+function cleanFilenamePart(text) {
+  const name = String(text ?? "").replace(/[\\/:*?"<>|\u0000-\u001f\u007f]/g,"_")
+    .replace(/\s+/g," ").replace(/[. ]+$/g,"").trim().slice(0,65);
+  return name || "未入力";
+}
+function makePhotoFileName(dateInfo, species, investigator, file, index=0, total=1) {
+  const d = dateInfo.date;
+  const z = n => String(n).padStart(2,"0");
+  const date = `${d.getFullYear()}${z(d.getMonth()+1)}${z(d.getDate())}`;
+  const time = `${z(d.getHours())}${z(d.getMinutes())}`;
+  const suffix = total > 1 ? "_" + String(index+1).padStart(2,"0") : "";
+  return `${date}_${time}_${cleanFilenamePart(species)}_${cleanFilenamePart(investigator)}${suffix}.${photoFileExtension(file)}`;
+}
+function getStoredPhotos(item) {
+  if (!item) return [];
+  if (Array.isArray(item.photoAttachments)) {
+    return item.photoAttachments.filter(p => p && p.blob instanceof Blob)
+      .map(p => ({name:String(p.name || "写真"),blob:p.blob,
+        method:p.method || "ブラウザ内",path:String(p.path || ""),folderName:String(p.folderName || "")}));
+  }
+  // 旧バージョンの写真1枚形式を引き継ぐ
+  if (item.photoBlob instanceof Blob) {
+    return [{
+      name:String(item.feature?.properties?.["写真ファイル名"] || "observation_photo.jpg"),
+      blob:item.photoBlob,
+      method:String(item.feature?.properties?.["写真保存方法"] || "既存写真"),
+      path:"",folderName:""
+    }];
+  }
+  return [];
+}
+function photoRelativePaths(photos) {
+  // 絶対パスはWebブラウザの権限制限で取得不可。保存先を基準にした相対パスのみ保持。
+  return photos.map(p => p.path || (
+    p.method === "選択フォルダ" ? "./"+p.name : ""
+  )).filter(Boolean).join("、");
+}
+function setPhotoMetadata(properties,photos) {
+  if (!photos.length) return;
+  properties["写真ファイル名"] = photos.map(p=>p.name).join("、");
+  properties["写真保存方法"] = photos.map(p=>p.method).join("、");
+  properties["写真のアドレス"] = photoRelativePaths(photos);
+  properties["写真保存先フォルダ"] = [...new Set(photos.map(p=>p.folderName).filter(Boolean))].join("、");
+}
+function renderPhotoSelection() {
+  clearPhotoSelectionButton.disabled = selectedPhotos.length === 0;
+  photoSelectionStatus.textContent = selectedPhotos.length
+    ? `選択中：${selectedPhotos.length}枚（完了時にコピーして追加）`
+    : "新たに選択した写真はありません。";
+  selectedPhotoList.replaceChildren();
+  selectedPhotoList.hidden = selectedPhotos.length === 0;
+  selectedPhotos.forEach((file,index) => {
+    const li = document.createElement("li");
+    li.append(document.createTextNode(file.name + " "));
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "remove-selected-photo";
+    button.textContent = "解除";
+    button.setAttribute("aria-label",file.name + " を選択から外す");
+    button.addEventListener("click", () => {
+      selectedPhotos.splice(index,1);
+      photoInput.value = "";
+      renderPhotoSelection();
+    });
+    li.append(button);
+    selectedPhotoList.append(li);
+  });
+}
+function fileNameFromPage() {
+  try { return decodeURIComponent(location.pathname.split("/").pop() || ""); }
+  catch { return ""; }
+}
+// 写真の保存先を、写真付き記録の完了クリック時に選択／再許可する。
+// 保存先フォルダはブラウザから自動判別できないため初回のみユーザーが選ぶ。
+// File System Access API非対応や選択取消では写真をダウンロードする。
+async function preparePhotoDestinationForSave() {
+  if (typeof window.showDirectoryPicker !== "function") {
+    photoFolderStatus.textContent = "直接保存に非対応のため、写真をダウンロードします。";
+    photoFolderStatus.hidden = false;
+    return "download";
+  }
+  if (photoDirectoryHandle) {
+    try {
+      if (await checkPhotoDirectoryAccess()) {
+        photoFolderStatus.textContent = "写真の保存先：" + photoDirectoryHandle.name;
+        photoFolderStatus.hidden = false;
+        return "folder";
+      }
+    } catch (error) { console.warn("以前の保存先へのアクセスを確認できません:", error); }
+    // 許可がない場合は保存先を勝手に書き換えず、ダウンロードに切り替える。
+    photoFolderStatus.textContent = "以前の写真保存先へのアクセスが許可されませんでした。今回はダウンロードします。";
+    photoFolderStatus.hidden = false;
+    return "download";
+  }
+  try {
+    // 完了ボタンの実クリックに連動して直接呼び出す（ユーザー操作が必要）。
+    const picked = await window.showDirectoryPicker({id:"wg-photo-dir",mode:"readwrite"});
+    const htmlName = fileNameFromPage();
+    if (location.protocol === "file:" && htmlName.toLowerCase().endsWith(".html")) {
+      try { await picked.getFileHandle(htmlName,{create:false}); }
+      catch { throw new Error("選択したフォルダにこのHTMLが見つかりません。HTMLと同じフォルダを選んでください。"); }
+    }
+    photoDirectoryHandle = picked;
+    try { await putStoredPreference("photoDirectoryHandle", picked); }
+    catch (error) { console.warn("保存先フォルダの記憶に失敗:",error); }
+    photoFolderStatus.textContent = "写真の保存先：" + picked.name;
+    photoFolderStatus.hidden = false;
+    return "folder";
+  } catch (error) {
+    photoFolderStatus.textContent = error.name === "AbortError"
+      ? "フォルダ選択を取り消したため、今回は写真をダウンロードします。"
+      : "保存先を指定できませんでした（" + error.message + "）。写真をダウンロードします。";
+    photoFolderStatus.hidden = false;
+    return "download";
+  }
+}
+
+// ファイル選択画面は同じIDで開き、対応ブラウザの前回フォルダ記憶を利用。
+// v25以前の選択元フォルダ設定があれば startIn に引き継ぐ。
+// 選択とドラッグ＆ドロップで写真を追加。重複は省く。
+function addSelectedPhotos(files) {
+  const list = [...files];
+  const images = list.filter(file => file instanceof File &&
+    (file.type.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif|tiff?|gif|bmp)$/i.test(file.name)));
+  const keys = new Set(selectedPhotos.map(f => `${f.name}\u0000${f.size}\u0000${f.lastModified}`));
+  let added = 0;
+  for (const file of images) {
+    const key = `${file.name}\u0000${file.size}\u0000${file.lastModified}`;
+    if (!keys.has(key)) { keys.add(key); selectedPhotos.push(file); added++; }
+  }
+  photoInput.value = "";
+  renderPhotoSelection();
+  if (list.length && !images.length) photoSelectionStatus.textContent = "画像ファイルを指定してください。";
+  else if (list.length > images.length) photoSelectionStatus.textContent += `（画像以外の${list.length-images.length}件は除外）`;
+  return added;
+}
+async function openPhotoPicker() {
+  if (typeof window.showOpenFilePicker !== "function") {
+    photoInput.click();
+    return;
+  }
+  try {
+    const options = {
+      id:"wg-photo-open", multiple:true,
+      types:[{description:"写真・画像",accept:{"image/*":[".jpg",".jpeg",".png",".webp",".heic",".heif",".tif",".tiff",".gif",".bmp"]}}]
+    };
+    if (photoSourceDirectoryHandle) options.startIn = photoSourceDirectoryHandle;
+    // この呼び出しはユーザーのクリック直後に行う必要がある。
+    const handles = await window.showOpenFilePicker(options);
+    const files = await Promise.all(handles.map(handle => handle.getFile()));
+    addSelectedPhotos(files);
+  } catch (error) {
+    if (error.name === "AbortError") return;
+    // 非対応・制限付き環境では通常のinput選択へ切り替えられるようにする。
+    photoSourceFolderStatus.textContent = "写真の選択画面を開けませんでした（" + error.message + "）。以下の通常のファイル選択欄をご利用ください。";
+    photoSourceFolderStatus.hidden = false;
+    photoInput.hidden = false;
+    photoInput.focus();
+  }
+}
+photoDropZone.addEventListener("click", openPhotoPicker);
+photoDropZone.addEventListener("keydown", event => {
+  if (event.key === "Enter" || event.key === " ") {event.preventDefault();openPhotoPicker();}
+});
+photoDropZone.addEventListener("dragenter", event => {
+  event.preventDefault(); photoDropZone.classList.add("drag-over");
+});
+photoDropZone.addEventListener("dragover", event => {
+  event.preventDefault(); event.dataTransfer.dropEffect = "copy";
+  photoDropZone.classList.add("drag-over");
+});
+photoDropZone.addEventListener("dragleave", event => {
+  if (!photoDropZone.contains(event.relatedTarget)) photoDropZone.classList.remove("drag-over");
+});
+photoDropZone.addEventListener("drop", event => {
+  event.preventDefault(); photoDropZone.classList.remove("drag-over");
+  addSelectedPhotos(event.dataTransfer?.files || []);
+});
+photoInput.addEventListener("change", () => addSelectedPhotos(photoInput.files || []));
+clearPhotoSelectionButton.addEventListener("click", () => {
+  selectedPhotos = [];
+  photoInput.value = "";
+  renderPhotoSelection();
+});
+
+async function checkPhotoDirectoryAccess() {
+  if (!photoDirectoryHandle) return false;
+  if (typeof photoDirectoryHandle.queryPermission !== "function") return true;
+  const permission = await photoDirectoryHandle.queryPermission({mode:"readwrite"});
+  if (permission === "granted") return true;
+  if (typeof photoDirectoryHandle.requestPermission === "function") {
+    return (await photoDirectoryHandle.requestPermission({mode:"readwrite"})) === "granted";
+  }
+  return false;
+}
+function unusedPhotoName(desired, usedNames) {
+  const dot = desired.lastIndexOf(".");
+  const base = dot > 0 ? desired.slice(0,dot) : desired;
+  const ext = dot > 0 ? desired.slice(dot) : "";
+  let candidate = desired;
+  for (let counter=2;usedNames.has(candidate);counter++) {
+    if (counter > 10000) throw new Error("写真のファイル名を確保できません。");
+    candidate = `${base}_${String(counter).padStart(2,"0")}${ext}`;
+  }
+  usedNames.add(candidate);
+  return candidate;
+}
+async function uniquePhotoName(dir, desired) {
+  const dot = desired.lastIndexOf(".");
+  const base = dot > 0 ? desired.slice(0,dot) : desired;
+  const ext = dot > 0 ? desired.slice(dot) : "";
+  for (let n=1;n<10000;n++) {
+    const candidate = n === 1 ? desired : `${base}_${String(n).padStart(2,"0")}${ext}`;
+    try { await dir.getFileHandle(candidate,{create:false}); }
+    catch (error) {
+      if (error.name === "NotFoundError") return candidate;
+      throw error;
+    }
+  }
+  throw new Error("写真のファイル名を確保できません。");
+}
+async function writePhotoCopy(file, fileName) {
+  if (typeof window.showDirectoryPicker === "function") {
+    if (!photoDirectoryHandle) {
+      throw new Error("写真の保存先が未設定です。次の保存時にフォルダを選択してください。");
+    }
+    if (!(await checkPhotoDirectoryAccess())) {
+      throw new Error("写真保存先へのアクセスが許可されていません。保存先フォルダを再選択してください。");
+    }
+    const uniqueName = await uniquePhotoName(photoDirectoryHandle,fileName);
+    const handle = await photoDirectoryHandle.getFileHandle(uniqueName,{create:true});
+    const writable = await handle.createWritable();
+    try { await writable.write(file); await writable.close(); }
+    catch (error) { try { await writable.abort(); } catch {} throw error; }
+    return {name:uniqueName,method:"folder"};
+  }
+  // フォルダ選択できないブラウザでは、完了後にまとめてダウンロードする。
+  return {name:fileName,method:"download"};
+}
+async function downloadPhotoGroup(photos, zipName="observation_photos.zip") {
+  if (!photos.length) return;
+  if (photos.length === 1) {
+    downloadBlob(photos[0].blob,photos[0].name);
+    return;
+  }
+  if (typeof JSZip === "undefined") {
+    throw new Error("複数写真のZIP作成ライブラリが読み込めません。ネット接続を確認してください。");
+  }
+  const zip = new JSZip();
+  for (const photo of photos) zip.file(photo.name,photo.blob);
+  const zipBlob = await zip.generateAsync({type:"blob",compression:"STORE"});
+  downloadBlob(zipBlob,zipName);
+}
+function photoFormReset() {
+  photoInput.value = "";
+  selectedPhotos = [];
+  renderPhotoSelection();
+  photoExistingStatus.textContent = "";
+  photoExistingStatus.hidden = true;
+}
+
+function popupMarkup(item) {
+  const props = item.feature.properties || {};
+  let html = '<div class="popup-content"><strong>観察・GIS情報</strong>';
+  for (const [name,value] of Object.entries(props)) {
+    if (name === "観察日時_ISO8601") continue;
+    const display = Array.isArray(value) ? value.join("、") : value && typeof value === "object" ? JSON.stringify(value) : value;
+    html += '<div class="row"><span class="field-label">'+escapeHTML(name)+'：</span>'+escapeHTML(display)+'</div>';
+  }
+  if (item.feature.geometry?.type === "Point") {
+    const [lng,lat] = item.feature.geometry.coordinates;
+    html += '<div class="row">緯度：'+escapeHTML(Number(lat).toFixed(6))+' ／ 経度：'+escapeHTML(Number(lng).toFixed(6))+'</div>';
+    if (!Object.hasOwn(props, "二次メッシュコード")) {
+      html += '<div class="row"><span class="field-label">二次メッシュコード：</span>'+
+        escapeHTML(meshCodeForFeature(item.feature) ?? "算出範囲外")+'</div>';
+    }
+  }
+  html += '</div><div class="popup-actions">';
+  const storedPhotos = getStoredPhotos(item);
+  if (storedPhotos.length) {
+    html += '<button type="button" class="popup-photo">写真をダウンロード（'+storedPhotos.length+'枚）</button>';
+  }
+  if (item.feature.geometry?.type === "Point" && typeof props["種名"] === "string") {
+    html += '<button type="button" class="popup-edit green">記録を編集</button>';
+  }
+  html += '<button type="button" class="popup-delete red">削除</button></div>';
+  return html;
+}
+// 調査分類群ごとのマーカー色（ユーザー指定のRGB値に対応）
+// 分類群は各地物の属性から決め、再読み込み・編集後も色が維持される。
+const CLASSIFICATION_MARKER_COLORS = Object.freeze({
+  "魚類":"rgb(0,0,255)",
+  "鳥類":"rgb(255,0,0)",
+  "植物":"rgb(0,255,0)",
+  "哺乳類":"rgb(128,64,0)",
+  "両生類":"rgb(0,255,255)",
+  "爬虫類":"rgb(255,255,0)",
+  "底生動物":"rgb(255,0,255)",
+  "陸上昆虫類":"rgb(0,128,0)"
+});
+function markerColorForFeature(feature) {
+  const category = feature?.properties?.["調査分類群"] ||
+    (typeof feature?.properties?.["種名"] === "string" ? "鳥類" : "");
+  // 旧複合分類群など、未指定の分類群には暫定の中立色を使用
+  return CLASSIFICATION_MARKER_COLORS[category] || "rgb(120,120,120)";
+}
+
+function categoryMarkerIcon(feature) {
+  const color = markerColorForFeature(feature);
+  return L.divIcon({
+    className:"classified-marker",
+    html:'<svg xmlns="http://www.w3.org/2000/svg" width="28" height="38" viewBox="0 0 28 38" aria-hidden="true">'+
+      '<path d="M14 1 C6.8 1 1 6.8 1 14 C1 23.2 14 36 14 36 C14 36 27 23.2 27 14 C27 6.8 21.2 1 14 1 Z" '+
+      'fill="'+color+'" stroke="#fff" stroke-width="2"/>'+
+      '<circle cx="14" cy="14" r="5" fill="#fff" opacity=".92"/>'+
+      '</svg>',
+    iconSize:[28,38], iconAnchor:[14,36], popupAnchor:[0,-32]
+  });
+}
+function renderRecord(item) {
+  fillFeatureMesh(item.feature);
+  const old = renderedLayers.get(item.id);
+  if (old) featureGroup.removeLayer(old);
+  const group = L.geoJSON(item.feature, {
+    style:{color:"#177d71",weight:3},
+    pointToLayer(feature, latlng) {
+      // 観察地点は指定色のピン型マーカーとして表示する。
+      if (typeof feature.properties?.["種名"] === "string") {
+        return L.marker(latlng, {icon:categoryMarkerIcon(feature)});
+      }
+      // 外部GeoJSONの一般ポイントには従来の点記号を使用する。
+      return L.circleMarker(latlng, {
+        radius:7, color:"#177d71", fillColor:"#177d71", fillOpacity:.8
+      });
+    },
+    onEachFeature(feature,layer) {
+      layer.bindPopup(popupMarkup(item),{maxWidth:330});
+      layer.on("popupopen", event => {
+        const root = event.popup.getElement();
+        if (!root) return;
+        const photoDownload = root.querySelector(".popup-photo");
+        if (photoDownload) {
+          photoDownload.addEventListener("click", async () => {
+            try {
+              const attachments = getStoredPhotos(item);
+              await downloadPhotoGroup(attachments,`observation_${item.id}_photos.zip`);
+            } catch (error) { alert("写真のダウンロードに失敗しました："+error.message); }
+          });
+        }
+        const edit = root.querySelector(".popup-edit");
+        if (edit) edit.addEventListener("click", () => {
+          map.closePopup();
+          openEditForm(item.id);
+        });
+        const del = root.querySelector(".popup-delete");
+        if (del) del.addEventListener("click", () => removeRecord(item.id));
+      });
+    }
+  });
+  featureGroup.addLayer(group);
+  records.set(item.id,item);
+  renderedLayers.set(item.id,group);
+  updateCount();
+  return group;
+}
+async function removeRecord(id) {
+  if (busy || !confirm("この記録を削除しますか？")) return;
+  busy = true;
+  try {
+    await deleteStoredRecord(id);
+    featureGroup.removeLayer(renderedLayers.get(id));
+    renderedLayers.delete(id);
+    records.delete(id);
+    updateCount();
+    map.closePopup();
+    setStatus("削除を自動保存しました。登録地物：" + records.size + " 件");
+  } catch (error) {
+    setStatus("削除を保存できませんでした："+error.message,"error");
+  } finally { busy = false; }
+}
+async function persistAndRender(item) {
+  await putStoredRecords([item]); // 永続保存が完了するまで地図に確定表示しない
+  renderRecord(item);
+  setStatus("自動保存済み（"+new Date().toLocaleString("ja-JP")+"）・登録レコード数："+records.size);
+}
+
+
+// ===========================================================
+// 種名補完：鳥類は旧シートH列、その他の分類群は新シートAA列。
+// ひらがな/カタカナの先頭2文字以上で前方一致。入力欄自体は書き換えない。
+// 分類群ごとに候補を別キャッシュし、読み込み中の切替にも対応。
+// ===========================================================
+const SPECIES_SOURCES = Object.freeze({
+  bird: Object.freeze({
+    key: "bird", id: "1ryxMzvuOzTx19FNbf3RugnrSm_RGxEhsnk6lkmtJ2wQ",
+    gid: "0", column: "H", index: 7,
+    cacheKey: "wildlife_species_candidates_H_gid0_v1"
+  }),
+  other: Object.freeze({
+    key: "other", id: "1csGhbrwXZtJb9gKwsopRGTstvWW_sRcBxDCXwttfanY",
+    gid: "1963017732", column: "AA", index: 26,
+    cacheKey: "wildlife_species_candidates_AA_gid1963017732_v1"
+  })
+});
+function getSpeciesSource() {
+  const group = document.getElementById("surveyGroup").value;
+  if (!group) return null;
+  return group === "鳥類" ? SPECIES_SOURCES.bird : SPECIES_SOURCES.other;
+}
+function speciesUrl(source, callback=null) {
+  const url = new URL(`https://docs.google.com/spreadsheets/d/${source.id}/gviz/tq`);
+  url.searchParams.set("gid",source.gid);
+  url.searchParams.set("range",`${source.column}:${source.column}`);
+  url.searchParams.set("headers","0");
+  url.searchParams.set("tqx",callback ? "out:json;responseHandler:"+callback : "out:json");
+  return url;
+}
+let activeSpeciesKey = null;
+let speciesLoadingKey = null;
+const speciesInputField = document.getElementById("species");
+const speciesBox = document.getElementById("speciesSuggestions");
+const speciesSourceStatus = document.getElementById("speciesSourceStatus");
+let speciesCandidates = [];
+let visibleSpeciesCandidates = [];
+let activeSpeciesIndex = -1;
+let speciesComposing = false;
+let speciesLoadingPromise = null;
+let speciesSheetLoaded = false;
+let speciesFetchFailed = false;
+
+function toKatakana(text) {
+  return String(text ?? "").normalize("NFKC").replace(/[ぁ-ゖ]/g,
+    char => String.fromCharCode(char.charCodeAt(0) + 0x60));
+}
+
+// 直接ローマ字で入力された場合の基本的なカタカナ変換。
+// 末尾の未完成な音節（s, sh, k など）は変換せず保持する。
+const ROMAJI_TO_KATAKANA = Object.freeze({
+  a:"ア", i:"イ", u:"ウ", e:"エ", o:"オ",
+  ka:"カ", ki:"キ", ku:"ク", ke:"ケ", ko:"コ",
+  sa:"サ", shi:"シ", si:"シ", su:"ス", se:"セ", so:"ソ",
+  ta:"タ", chi:"チ", ti:"チ", tsu:"ツ", tu:"ツ", te:"テ", to:"ト",
+  na:"ナ", ni:"ニ", nu:"ヌ", ne:"ネ", no:"ノ",
+  ha:"ハ", hi:"ヒ", fu:"フ", hu:"フ", he:"ヘ", ho:"ホ",
+  ma:"マ", mi:"ミ", mu:"ム", me:"メ", mo:"モ",
+  ya:"ヤ", yu:"ユ", yo:"ヨ",
+  ra:"ラ", ri:"リ", ru:"ル", re:"レ", ro:"ロ",
+  wa:"ワ", wi:"ウィ", we:"ウェ", wo:"ヲ",
+  ga:"ガ", gi:"ギ", gu:"グ", ge:"ゲ", go:"ゴ",
+  za:"ザ", ji:"ジ", zi:"ジ", zu:"ズ", ze:"ゼ", zo:"ゾ",
+  da:"ダ", di:"ヂ", du:"ヅ", de:"デ", do:"ド",
+  ba:"バ", bi:"ビ", bu:"ブ", be:"ベ", bo:"ボ",
+  pa:"パ", pi:"ピ", pu:"プ", pe:"ペ", po:"ポ",
+  kya:"キャ", kyu:"キュ", kyo:"キョ", gya:"ギャ", gyu:"ギュ", gyo:"ギョ",
+  sha:"シャ", shu:"シュ", sho:"ショ", sya:"シャ", syu:"シュ", syo:"ショ",
+  ja:"ジャ", ju:"ジュ", jo:"ジョ", jya:"ジャ", jyu:"ジュ", jyo:"ジョ",
+  cha:"チャ", chu:"チュ", cho:"チョ", cya:"チャ", cyu:"チュ", cyo:"チョ",
+  tya:"チャ", tyu:"チュ", tyo:"チョ",
+  nya:"ニャ", nyu:"ニュ", nyo:"ニョ",
+  hya:"ヒャ", hyu:"ヒュ", hyo:"ヒョ",
+  bya:"ビャ", byu:"ビュ", byo:"ビョ",
+  pya:"ピャ", pyu:"ピュ", pyo:"ピョ",
+  mya:"ミャ", myu:"ミュ", myo:"ミョ",
+  rya:"リャ", ryu:"リュ", ryo:"リョ",
+  fa:"ファ", fi:"フィ", fe:"フェ", fo:"フォ",
+  va:"ヴァ", vi:"ヴィ", vu:"ヴ", ve:"ヴェ", vo:"ヴォ",
+  tsa:"ツァ", tsi:"ツィ", tse:"ツェ", tso:"ツォ",
+  she:"シェ", che:"チェ", je:"ジェ", ye:"イェ",
+  tsa:"ツァ", swa:"スァ", kwa:"クァ", gwa:"グァ",
+  la:"ァ", li:"ィ", lu:"ゥ", le:"ェ", lo:"ォ",
+  xa:"ァ", xi:"ィ", xu:"ゥ", xe:"ェ", xo:"ォ",
+  lya:"ャ", lyu:"ュ", lyo:"ョ", xya:"ャ", xyu:"ュ", xyo:"ョ",
+  ltu:"ッ", xtu:"ッ", ltsu:"ッ", xtsu:"ッ"
+});
+function romajiToKatakana(value) {
+  let output = "";
+  const input = value.toLowerCase();
+  for (let i = 0; i < input.length;) {
+    const c = input[i];
+    if (!/[a-z]/.test(c)) { output += value[i]; i++; continue; }
+    const next = input[i+1] || "";
+    if (c === "n" && next === "'") { output += "ン"; i+=2; continue; }
+    if (c === "n" && next === "n") { output += "ン"; i+=2; continue; }
+    if (c === "n" && next && !/[aiueoy]/.test(next)) {
+      output += "ン"; i++; continue;
+    }
+    if (c === next && /[bcdfghjklmpqrstvwxyz]/.test(c) && c !== "n") {
+      output += "ッ"; i++; continue;
+    }
+    let match = null;
+    for (let n=4; n>=1; n--) {
+      const part = input.slice(i,i+n);
+      if (Object.hasOwn(ROMAJI_TO_KATAKANA,part)) { match = part; break; }
+    }
+    if (match) { output += ROMAJI_TO_KATAKANA[match]; i+=match.length; }
+    else { output += value[i]; i++; }
+  }
+  return output;
+}
+function normalizeSpecies(text) {
+  return romajiToKatakana(toKatakana(text));
+}
+function setSpeciesListOpen(open) {
+  speciesBox.hidden = !open;
+  speciesInputField.setAttribute("aria-expanded", String(open));
+  if (!open) {
+    activeSpeciesIndex = -1;
+    visibleSpeciesCandidates = [];
+    speciesBox.replaceChildren();
+  }
+}
+function pickSpeciesCandidate(value) {
+  speciesInputField.value = value;
+  speciesInputField.setCustomValidity("");
+  setSpeciesListOpen(false);
+  speciesInputField.focus();
+}
+function updateActiveSpecies(index) {
+  if (!visibleSpeciesCandidates.length) return;
+  activeSpeciesIndex = (index + visibleSpeciesCandidates.length) % visibleSpeciesCandidates.length;
+  [...speciesBox.children].forEach((el,i) => {
+    el.classList.toggle("active",i === activeSpeciesIndex);
+    el.setAttribute("aria-selected",String(i === activeSpeciesIndex));
+  });
+  speciesBox.children[activeSpeciesIndex]?.scrollIntoView({block:"nearest"});
+}
+function refreshSpeciesSuggestions() {
+  if (!getSpeciesSource()) {
+    setSpeciesListOpen(false); return;
+  }
+  if (speciesComposing || document.activeElement !== speciesInputField) {
+    setSpeciesListOpen(false); return;
+  }
+  // 入力欄はひらがなのまま、検索時のみカタカナへ変換する
+  const query = normalizeSpecies(speciesInputField.value).trim();
+  if (Array.from(query).length < 2 || !speciesCandidates.length) {
+    setSpeciesListOpen(false); return;
+  }
+  // 候補の途中に含まれているだけの名前は表示せず、必ず先頭一致に限定する。
+  // 2文字なら2文字、3文字なら3文字、4文字以上なら入力した文字列で絞り込む。
+  const matches = speciesCandidates.filter(name => name.startsWith(query));
+  visibleSpeciesCandidates = matches.slice(0,15);
+  activeSpeciesIndex = visibleSpeciesCandidates.length ? 0 : -1;
+  speciesBox.replaceChildren();
+  for (let i=0; i<visibleSpeciesCandidates.length; i++) {
+    const name = visibleSpeciesCandidates[i];
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = "species-option" + (i===0 ? " active" : "");
+    option.setAttribute("role","option");
+    option.setAttribute("aria-selected", String(i===0));
+    option.textContent = name;
+    option.addEventListener("mousedown", event => event.preventDefault());
+    option.addEventListener("click", () => pickSpeciesCandidate(name));
+    speciesBox.append(option);
+  }
+  const hasResults = visibleSpeciesCandidates.length > 0;
+  speciesBox.hidden = !hasResults;
+  speciesInputField.setAttribute("aria-expanded",String(hasResults));
+  const column = getSpeciesSource()?.column || "";
+  if (!hasResults) {
+    speciesSourceStatus.textContent = column + "列の候補" + speciesCandidates.length + "件を読み込み済み。入力に一致する種名はありません（手入力可能）。";
+  } else if (!speciesFetchFailed) {
+    speciesSourceStatus.textContent = column + "列の候補から先頭一致で" + matches.length + "件該当（最大15件を表示）。";
+  }
+}
+function setSpeciesFromCache(source=getSpeciesSource()) {
+  if (!source) return;
+  try {
+    const raw = localStorage.getItem(source.cacheKey);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (!Array.isArray(data.values) || !data.values.length) return;
+    speciesCandidates = data.values.filter(v => typeof v === "string");
+    speciesSourceStatus.textContent = "前回取得した"+source.column+"列の候補"+speciesCandidates.length+"件を利用できます。最新データを確認中…";
+  } catch (_) {}
+}
+// 公開されているGoogleシートのJSON形式を解釈する。
+// range=H:H または AA:AA に限定して取得するので行の先頭セルが対象列。
+function normalizeCandidateValues(values) {
+  return [...new Set(values.map(value => toKatakana(String(value ?? "").trim()))
+    .filter(value => value && !["種名", "和名", "H", "AA", "種名（カタカナ）"].includes(value)))];
+}
+function extractSpeciesFromGvizData(result) {
+  if (result?.status !== "ok" || !Array.isArray(result?.table?.rows)) {
+    const details = result?.errors?.map(e => e.detailed_message || e.message).filter(Boolean).join(" / ");
+    throw new Error(details || "指定列を読み取れません。Googleシートの閲覧権限を確認してください。");
+  }
+  return normalizeCandidateValues(result.table.rows.map(row => {
+    const cell = row?.c?.[0];
+    return cell?.f ?? cell?.v ?? "";
+  }));
+}
+function extractSpeciesFromGviz(responseText) {
+  const a = responseText.indexOf("{");
+  const b = responseText.lastIndexOf("}");
+  if (a < 0 || b < a) throw new Error("Googleシートから正しいデータを取得できませんでした。");
+  return extractSpeciesFromGvizData(JSON.parse(responseText.slice(a,b+1)));
+}
+
+// file:// ではfetchの通信がブラウザに制限されることがある。
+// Google Visualization APIの responseHandler をscriptタグで受け取る方式に切り替える。
+// Googleから提供されるJSONPに限って使用し、不特定の外部サイトは経由しない。
+let speciesJsonpSeq = 0;
+function loadSpeciesByScript(source) {
+  return new Promise((resolve,reject) => {
+    const callback = "webgisSpeciesResponse" + (++speciesJsonpSeq);
+    const script = document.createElement("script");
+    let done = false;
+    let timer;
+    const finish = (error, values) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      script.remove();
+      try { delete window[callback]; } catch (_) { window[callback] = undefined; }
+      if (error) reject(error); else resolve(values);
+    };
+    window[callback] = (data) => {
+      try { finish(null,extractSpeciesFromGvizData(data)); }
+      catch (e) { finish(e); }
+    };
+    script.onerror = () => finish(new Error("Googleシートの読み込みが拒否されました（共有権限またはネットワークを確認）。"));
+    timer = setTimeout(() => finish(new Error("Googleシートへの接続がタイムアウトしました。")), 14000);
+    const url = speciesUrl(source,callback);
+    url.searchParams.set("_", String(Date.now()));
+    script.src = url.toString();
+    document.head.appendChild(script);
+  });
+}
+
+function installSpeciesCandidates(names, sourceLabel, source=getSpeciesSource()) {
+  if (!source) return;
+  const cleaned = normalizeCandidateValues(names);
+  if (!cleaned.length) throw new Error(source.column+"列に種名が見つかりません。シート全体（A～"+source.column+"列）を確認してください。");
+  try {
+    localStorage.setItem(source.cacheKey, JSON.stringify({values:cleaned,loadedAt:Date.now(),source:sourceLabel}));
+  } catch (_) {}
+  // 非同期リクエスト完了前に分類群が変更された場合、別分類群に混在させない。
+  if (activeSpeciesKey !== source.key) return;
+  speciesCandidates = cleaned;
+  speciesSheetLoaded = true;
+  speciesFetchFailed = false;
+  speciesSourceStatus.textContent = sourceLabel + "から種名" + cleaned.length + "件を取得しました。ひらがな・カタカナの先頭2文字から候補を表示し、3文字目以降で絞り込みます。";
+  refreshSpeciesSuggestions();
+}
+
+async function loadSpeciesFromSheet(force=false) {
+  const source = getSpeciesSource();
+  if (!source) return;
+  if (speciesLoadingPromise && speciesLoadingKey === source.key) return speciesLoadingPromise;
+  if (speciesSheetLoaded && !force) return;
+  speciesFetchFailed = false;
+  speciesSourceStatus.textContent = `指定Googleスプレッドシートの${source.column}列に接続しています…`;
+  const request = (async () => {
+    try {
+      let names;
+      if (location.protocol !== "file:") {
+        try {
+          const response = await fetch(speciesUrl(source).toString(), {cache:"no-store"});
+          if (!response.ok) throw new Error("HTTP " + response.status);
+          names = extractSpeciesFromGviz(await response.text());
+        } catch (_) {
+          // fetchのCORS制約がある場合はGoogle Visualization APIのJSONPで再試行。
+          names = await loadSpeciesByScript(source);
+        }
+      } else {
+        names = await loadSpeciesByScript(source);
+      }
+      installSpeciesCandidates(names,`指定シート${source.column}列（オンライン）`,source);
+    } catch (error) {
+      if (activeSpeciesKey !== source.key) return;
+      speciesFetchFailed = true;
+      const explanation = "Googleシートから取得できません（" + error.message + "）。";
+      speciesSourceStatus.textContent = speciesCandidates.length
+        ? explanation + " 保存済み候補" + speciesCandidates.length + "件を使用します。"
+        : explanation + "閲覧権限を確認するか、下のExcel・CSVファイルを読み込んでください。";
+    }
+  })();
+  speciesLoadingPromise = request;
+  speciesLoadingKey = source.key;
+  try { await request; }
+  finally {
+    if (speciesLoadingPromise === request) {
+      speciesLoadingPromise = null;
+      speciesLoadingKey = null;
+    }
+  }
+}
+
+function activateSpeciesSource() {
+  const source = getSpeciesSource();
+  const nextKey = source?.key ?? null;
+  if (activeSpeciesKey === nextKey) return;
+  activeSpeciesKey = nextKey;
+  speciesCandidates = [];
+  speciesSheetLoaded = false;
+  speciesFetchFailed = false;
+  setSpeciesListOpen(false);
+  if (!source) return;
+  setSpeciesFromCache(source);
+}
+
+// GoogleシートのCSVを「シート全体」でダウンロードした場合のH列だけを利用する。
+// 引用符内の改行・カンマ・二重引用符にも対応。
+function parseCSVRows(text) {
+  const rows = []; let row = [], cell = "", quoted = false;
+  text = text.replace(/^\uFEFF/,"");
+  for (let i=0;i<text.length;i++) {
+    const char = text[i];
+    if (quoted) {
+      if (char === '"' && text[i+1] === '"') { cell += '"'; i++; }
+      else if (char === '"') quoted = false;
+      else cell += char;
+    } else if (char === '"') quoted = true;
+    else if (char === ',') { row.push(cell); cell = ""; }
+    else if (char === '\n' || char === '\r') {
+      if (char === '\r' && text[i+1] === '\n') i++;
+      row.push(cell); rows.push(row); row = []; cell = "";
+    } else cell += char;
+  }
+  if (quoted) throw new Error("CSVの引用符が閉じていません。");
+  if (row.length || cell.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+
+document.getElementById("speciesLocalFile").addEventListener("change", async function () {
+  const file = this.files?.[0];
+  if (!file) return;
+  try {
+    let rows;
+    if (/\.csv$/i.test(file.name)) {
+      rows = parseCSVRows(await file.text());
+    } else if (/\.xlsx?$/i.test(file.name)) {
+      if (!window.XLSX) throw new Error("Excel読込に必要なライブラリを読み込めません。CSV形式で保存して再試行してください。");
+      const book = XLSX.read(await file.arrayBuffer(),{type:"array"});
+      if (!book.SheetNames.length) throw new Error("Excelにシートがありません。");
+      // CSV・Excelいずれも対象列の位置はA列始まりで数える。
+      rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]],{header:1,defval:"",raw:false});
+    } else {
+      throw new Error(".xlsx、.xls、.csvのいずれかを選択してください。");
+    }
+    const source = getSpeciesSource();
+    if (!source) throw new Error("先に調査分類群を選択してください。");
+    installSpeciesCandidates(rows.map(row => row[source.index] ?? ""),
+      "ローカルファイルの"+source.column+"列",source);
+  } catch (error) {
+    speciesSourceStatus.textContent = "ファイルから読み込めませんでした：" + error.message;
+  } finally {
+    this.value = "";
+  }
+});
+
+speciesInputField.addEventListener("focus", () => {
+  if (getSpeciesSource() && !speciesSheetLoaded) void loadSpeciesFromSheet();
+  refreshSpeciesSuggestions();
+});
+speciesInputField.addEventListener("compositionstart", () => {
+  speciesComposing = true;
+  setSpeciesListOpen(false);
+});
+speciesInputField.addEventListener("compositionend", () => {
+  speciesComposing = false;
+  refreshSpeciesSuggestions();
+});
+speciesInputField.addEventListener("input", event => {
+  speciesInputField.setCustomValidity("");
+  if (speciesComposing || event.isComposing) return;
+  refreshSpeciesSuggestions();
+});
+speciesInputField.addEventListener("keydown", event => {
+  if (speciesComposing || event.isComposing || speciesBox.hidden || !visibleSpeciesCandidates.length) return;
+  if (event.key === "ArrowDown") {
+    event.preventDefault(); updateActiveSpecies(activeSpeciesIndex + 1);
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault(); updateActiveSpecies(activeSpeciesIndex - 1);
+  } else if (event.key === "Enter") {
+    event.preventDefault(); pickSpeciesCandidate(visibleSpeciesCandidates[Math.max(0,activeSpeciesIndex)]);
+  } else if (event.key === "Escape") {
+    event.preventDefault(); setSpeciesListOpen(false);
+  }
+});
+speciesInputField.addEventListener("blur", () => {
+  // 候補ボタンのクリック処理より後で閉じる
+  setTimeout(() => setSpeciesListOpen(false), 120);
+});
+document.getElementById("reloadSpecies").addEventListener("click", () => void loadSpeciesFromSheet(true));
+// 調査分類群が選ばれてから対応するシートを読み込む。
+
+// ===========================================================
+// 調査分類群別のフォーム。鳥類だけ詳細項目を表示。
+// 種名候補は鳥類H列、それ以外はAA列を表示。
+// ===========================================================
+const surveyGroupSelect = document.getElementById("surveyGroup");
+const investigatorInput = document.getElementById("investigator");
+let surveySettingsBeforeEdit = null;
+const SURVEY_DEFAULTS_KEY = "wildlife_observation_survey_defaults_v1";
+function loadSurveyDefaults() {
+  try {
+    const raw = localStorage.getItem(SURVEY_DEFAULTS_KEY);
+    if (!raw) return {group:"", investigator:""};
+    const parsed = JSON.parse(raw);
+    return {
+      group: typeof parsed.group === "string" ? parsed.group : "",
+      investigator: typeof parsed.investigator === "string" ? parsed.investigator : ""
+    };
+  } catch {
+    return {group:"", investigator:""};
+  }
+}
+function saveSurveyDefaults(group, investigator) {
+  try {
+    localStorage.setItem(SURVEY_DEFAULTS_KEY, JSON.stringify({group, investigator}));
+  } catch {}
+}
+let lastSurveyDefaults = loadSurveyDefaults();
+const birdDetails = document.getElementById("birdDetails");
+const birdSpeciesTools = document.getElementById("birdSpeciesTools");
+const notesInput = document.getElementById("notes");
+const notesRequiredMarker = document.getElementById("notesRequired");
+const formValidationMessage = document.getElementById("formValidationMessage");
+const birdChoiceGroups = [
+  ["age", "年齢"],
+  ["sex", "性別"],
+  ["environment", "環境"],
+  ["confirmation", "確認方法"],
+  ["breeding", "繁殖行動"]
+];
+
+function isBirdSurvey() {
+  return surveyGroupSelect.value === "鳥類";
+}
+function updateNotesRequirement() {
+  const need = isBirdSurvey() && ["breeding", "confirmation"].some(name =>
+    [...document.querySelectorAll('input[name="' + name + '"]:checked')].some(el => el.value === "その他")
+  );
+  notesInput.required = need;
+  notesRequiredMarker.hidden = !need;
+  document.getElementById("notesHint").textContent = need
+    ? "「その他」が選択されているため、備考の入力が必須です。"
+    : "備考は任意です。繁殖行動・確認方法の「その他」を選んだ場合のみ必須になります。";
+}
+function resetValidationError() {
+  formValidationMessage.hidden = true;
+  formValidationMessage.textContent = "";
+  birdChoiceGroups.forEach(([name]) => {
+    const region = document.querySelector('.checks[aria-labelledby="' +
+      ({age:"ageLabel",sex:"sexLabel",environment:"environmentLabel",breeding:"breedingLabel",confirmation:"confirmationLabel"})[name] + '"]');
+    region?.classList.remove("missing-group");
+  });
+}
+function showFormError(text, field=null) {
+  formValidationMessage.textContent = text;
+  formValidationMessage.hidden = false;
+  if (field) {
+    field.scrollIntoView({block:"center",behavior:"smooth"});
+    if (typeof field.focus === "function") field.focus();
+  }
+}
+function updateClassificationUI() {
+  const group = surveyGroupSelect.value;
+  const isBird = isBirdSurvey();
+  birdDetails.hidden = !isBird;
+  birdSpeciesTools.hidden = !group;
+  activateSpeciesSource();
+  const source = getSpeciesSource();
+  speciesInputField.placeholder = "例：しじ（ひらがな2文字で候補検索）";
+  document.getElementById("groupHelp").textContent = !group
+    ? "分類群を選択すると、その分類群の記録項目が表示されます。"
+    : isBird
+      ? "鳥類：詳細な記録項目を入力します。種名はH列で候補を検索できます。"
+      : "この分類群では、種名・個体数・観察日時・調査者名を記録します。種名はAA列で候補を検索できます。";
+  if (source) {
+    document.getElementById("speciesSearchHelp").innerHTML =
+      "ひらがな・カタカナの<b>先頭2文字</b>から候補を表示し、3文字目以降で絞り込みます。"+
+      " Googleスプレッドシートの<b>"+source.column+"列</b>を使用します。";
+    document.getElementById("speciesFileHint").textContent =
+      "指定シート全体をExcel・CSVで保存し、ファイルを選択すると"+source.column+"列だけを候補に登録します。読み込んだ候補は次回も使えます。";
+    const link = document.getElementById("speciesSourceLink");
+    link.href = `https://docs.google.com/spreadsheets/d/${source.id}/edit?gid=${source.gid}#gid=${source.gid}`;
+    link.textContent = "指定Googleスプレッドシートの"+source.column+"列（gid="+source.gid+"）";
+  }
+  updateNotesRequirement();
+  resetValidationError();
+  if (source && !speciesSheetLoaded) void loadSpeciesFromSheet();
+}
+surveyGroupSelect.addEventListener("change", () => {
+  speciesInputField.value = "";
+  speciesInputField.setCustomValidity("");
+  updateClassificationUI();
+});
+for (const name of ["breeding", "confirmation"]) {
+  document.querySelectorAll('input[name="' + name + '"]').forEach(box => {
+    box.addEventListener("change", () => {
+      updateNotesRequirement();
+      resetValidationError();
+    });
+  });
+}
+for (const [name] of birdChoiceGroups) {
+  document.querySelectorAll('input[name="' + name + '"]').forEach(box => {
+    box.addEventListener("change", resetValidationError);
+  });
+}
+// ===========================================================
+// 3. 日時・フォーム
+// ===========================================================
+function setDateInputs(date) {
+  const values = [date.getFullYear(),date.getMonth()+1,date.getDate(),date.getHours(),date.getMinutes()];
+  ["obsYear","obsMonth","obsDay","obsHour","obsMinute"].forEach((id,i) => {
+    document.getElementById(id).value = values[i];
+  });
+}
+function readDateInputs() {
+  const ids = ["obsYear","obsMonth","obsDay","obsHour","obsMinute"];
+  const nums = ids.map(id => Number(document.getElementById(id).value));
+  const [y,m,d,h,minute] = nums;
+  if (!nums.every(Number.isInteger) || y < 1900 || y > 2100 || m<1 || m>12 || d<1 || d>31 || h<0 || h>23 || minute<0 || minute>59) return null;
+  const date = new Date(y,m-1,d,h,minute);
+  if (date.getFullYear()!==y || date.getMonth()!==m-1 || date.getDate()!==d || date.getHours()!==h || date.getMinutes()!==minute) return null;
+  const pad = n => String(n).padStart(2,"0");
+  return {date, text:`${y}-${pad(m)}-${pad(d)} ${pad(h)}:${pad(minute)}`};
+}
+function closeRecordForm() {
+  setSpeciesListOpen(false);
+  recordPanel.hidden = true;
+  previewGroup.clearLayers();
+  pendingPoint = null;
+  editingId = null;
+  recordForm.reset();
+  photoFormReset();
+  // 編集中に切り替えた設定は既定値へ戻す。
+  if (surveySettingsBeforeEdit) {
+    lastSurveyDefaults = {...surveySettingsBeforeEdit};
+    surveySettingsBeforeEdit = null;
+  }
+  updateClassificationUI();
+}
+function displayForm() {
+  const [lng,lat] = pendingPoint.coordinates;
+  document.getElementById("targetCoordinates").textContent =
+    "登録地点　緯度："+lat.toFixed(6)+" ／ 経度："+lng.toFixed(6);
+  document.getElementById("targetMesh").textContent =
+    "二次メッシュコード："+(secondMeshCode(lat,lng) ?? "算出範囲外");
+  document.getElementById("recordTitle").textContent = editingId ? "観察記録の編集" : "観察記録の入力";
+  submitButton.textContent = editingId ? "更新して自動保存" : "完了・自動保存";
+  const existing = editingId ? records.get(editingId) : null;
+  const existingPhotos = getStoredPhotos(existing);
+  photoExistingStatus.hidden = existingPhotos.length === 0;
+  photoExistingStatus.textContent = existingPhotos.length
+    ? "登録済み写真：" + existingPhotos.length + "枚（そのまま保持され、新しい写真は追加されます）"
+    : "";
+  renderPhotoSelection();
+  recordPanel.hidden = false;
+  previewGroup.clearLayers();
+  L.circleMarker([lat,lng],{radius:10,color:"#fff",weight:3,fillColor:"#ed8a23",fillOpacity:1}).addTo(previewGroup);
+  if (Number.isFinite(pendingPoint.accuracy) && pendingPoint.accuracy > 0) {
+    L.circle([lat,lng],{radius:pendingPoint.accuracy,color:"#1678c6",weight:1,fillOpacity:.08,interactive:false}).addTo(previewGroup);
+  }
+  setTimeout(() => {
+    (editingId ? document.getElementById("species") : surveyGroupSelect).focus();
+  }, 60);
+}
+function openNewForm(latlng, method, accuracy=null) {
+  if (!database) { setStatus("自動保存が利用できないため登録できません。","error"); return; }
+  closeRecordForm();
+  recordForm.reset();
+  setDateInputs(new Date());
+  surveyGroupSelect.value = lastSurveyDefaults.group || "";
+  investigatorInput.value = lastSurveyDefaults.investigator || "";
+  updateClassificationUI();
+  editingId = null;
+  pendingPoint = {coordinates:[latlng.lng,latlng.lat],method,accuracy};
+  displayForm();
+  message.textContent = "内容を入力して「完了・自動保存」を押してください。";
+}
+// チェック式フィールドは配列で保持。過去バージョンの文字列記録も読み込む。
+function readChoiceValues(value) {
+  if (Array.isArray(value)) return value.map(v => String(v).trim()).filter(Boolean);
+  if (value == null || value === "") return [];
+  return String(value).split(/[、,，;；\/／]+/).map(v => v.trim()).filter(Boolean);
+}
+function restoreChecks(name, value) {
+  const selected = new Set(readChoiceValues(value));
+  document.querySelectorAll('input[name="' + name + '"]').forEach(input => {
+    input.checked = selected.has(input.value);
+  });
+}
+function getCheckedValues(name) {
+  return [...document.querySelectorAll('input[name="' + name + '"]:checked')]
+    .map(input => input.value);
+}
+
+function openEditForm(id) {
+  const item = records.get(id);
+  if (!item || item.feature.geometry?.type !== "Point") return;
+  closeRecordForm();
+  recordForm.reset();
+  surveySettingsBeforeEdit = {...lastSurveyDefaults};
+  editingId = id;
+  const props = item.feature.properties || {};
+  const [lng,lat] = item.feature.geometry.coordinates;
+  pendingPoint = {coordinates:[lng,lat],method:props["登録方法"]||"編集",accuracy:props["位置精度_m"]??null};
+  // 保存済みの年月日・時分を復元
+  const dateText = String(props["観察日時"] || "");
+  const m = dateText.match(/^(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{1,2})$/);
+  if (m) {
+    ["obsYear","obsMonth","obsDay","obsHour","obsMinute"].forEach((field,i)=>{
+      document.getElementById(field).value = Number(m[i+1]);
+    });
+  } else { setDateInputs(new Date()); }
+  // v11以前の既存観察記録は鳥類として扱い、調査者名は編集時に入力する。
+  surveyGroupSelect.value = props["調査分類群"] || "鳥類";
+  investigatorInput.value = props["調査者名"] || "";
+  updateClassificationUI();
+  document.getElementById("species").value = props["種名"] || "";
+  document.getElementById("individuals").value = props["個体数"] ?? 1;
+  restoreChecks("age", props["年齢"]);
+  restoreChecks("sex", props["性別"]);
+  restoreChecks("environment", props["環境"]);
+  restoreChecks("breeding", props["繁殖行動"]);
+  restoreChecks("confirmation", props["確認方法"]);
+  document.getElementById("notes").value = props["備考"] || "";
+  updateNotesRequirement();
+  document.getElementById("species").setCustomValidity("");
+  map.setView([lat,lng],Math.max(map.getZoom(),13));
+  displayForm();
+}
+document.getElementById("cancelRecord").addEventListener("click", () => {
+  if (busy) return;
+  closeRecordForm();
+  message.textContent = "登録・編集をキャンセルしました。";
+});
+
+recordForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  if (busy || !pendingPoint) return;
+  const dateInfo = readDateInputs();
+  if (!dateInfo) { alert("観察日時を正しく入力してください。"); return; }
+  resetValidationError();
+  const classification = surveyGroupSelect.value;
+  const investigator = investigatorInput.value.trim();
+  if (!classification) {
+    showFormError("調査分類群を選択してください。", surveyGroupSelect); return;
+  }
+  if (!investigator) {
+    showFormError("調査者名を入力してください。", investigatorInput); return;
+  }
+  const speciesInput = document.getElementById("species");
+  const species = isBirdSurvey()
+    ? normalizeSpecies(speciesInput.value).trim()
+    : speciesInput.value.trim();
+  if (!species) {
+    showFormError("種名を入力してください。", speciesInput); return;
+  }
+  if (isBirdSurvey() && !/^[ァ-ヶー・･\s]+$/u.test(species) && !speciesCandidates.includes(species)) {
+    speciesInput.setCustomValidity("鳥類の種名はカタカナで入力してください。");
+    speciesInput.reportValidity();
+    return;
+  }
+  speciesInput.setCustomValidity("");
+  speciesInput.value = species;
+  const numValue = document.getElementById("individuals").value.trim();
+  const count = Number(numValue);
+  if (!numValue || !Number.isSafeInteger(count) || count < 1) { alert("個体数は1以上の整数を入力してください。"); return; }
+  const age = getCheckedValues("age");
+  const sex = getCheckedValues("sex");
+  const environment = getCheckedValues("environment");
+  const breeding = getCheckedValues("breeding");
+  const confirmation = getCheckedValues("confirmation");
+  const notes = notesInput.value.trim();
+  if (isBirdSurvey()) {
+    for (const [name, label] of birdChoiceGroups) {
+      if (getCheckedValues(name).length === 0) {
+        const region = document.querySelector('.checks[aria-labelledby="' +
+          ({age:"ageLabel",sex:"sexLabel",environment:"environmentLabel",breeding:"breedingLabel",confirmation:"confirmationLabel"})[name] + '"]');
+        region?.classList.add("missing-group");
+        showFormError(label + "は必須項目です。1つ以上チェックしてください。", region);
+        return;
+      }
+    }
+  }
+  updateNotesRequirement();
+  if (notesInput.required && !notes) {
+    showFormError("『その他』を選択した場合は備考を必ず入力してください。", notesInput);
+    return;
+  }
+  lastSurveyDefaults = {group: classification, investigator};
+  saveSurveyDefaults(classification, investigator);
+  const previous = editingId ? records.get(editingId) : null;
+  const properties = {
+    ...(previous?.feature.properties || {}),
+    "調査分類群":classification,
+    "調査者名":investigator,
+    "観察日時":dateInfo.text,
+    "観察日時_ISO8601":dateInfo.date.toISOString(),
+    "種名":species,
+    "個体数":count,
+    ...(isBirdSurvey() ? {
+      "年齢":age,
+      "性別":sex,
+      "環境":environment,
+      "確認方法":confirmation,
+      "繁殖行動":breeding,
+      "備考":notes
+    } : {}),
+    "登録方法":pendingPoint.method,
+    "位置精度_m":pendingPoint.accuracy,
+    "二次メッシュコード":secondMeshCode(pendingPoint.coordinates[1],pendingPoint.coordinates[0])
+  };
+  // 他の分類群には鳥類専用の属性を残さない（編集で分類群を変更しても安全）。
+  if (!isBirdSurvey()) {
+    ["年齢", "性別", "環境", "繁殖行動", "確認方法", "備考"].forEach(name => delete properties[name]);
+  }
+  const filesToAdd = [...selectedPhotos];
+  const previousPhotos = getStoredPhotos(previous);
+  for (const photo of filesToAdd) {
+    if (!photo.type.startsWith("image/") && !/\.(jpg|jpeg|png|webp|heic|heif|tif|tiff|gif|bmp)$/i.test(photo.name)) {
+      showFormError("画像ファイルだけを選択してください。", photoInput);
+      return;
+    }
+  }
+  const usedNames = new Set(previousPhotos.map(p => p.name));
+  const photosToAdd = filesToAdd.map((file,index) => ({
+    name:unusedPhotoName(makePhotoFileName(dateInfo,species,investigator,file,index,filesToAdd.length),usedNames),
+    blob:file,
+    method:"ブラウザ内（保存先へ書き込み前）",
+    path:"",folderName:""
+  }));
+  const id = editingId || newId();
+  const allPhotos = [...previousPhotos,...photosToAdd];
+  setPhotoMetadata(properties,allPhotos);
+  const item = {
+    id,
+    feature:{type:"Feature",id,geometry:{type:"Point",coordinates:[...pendingPoint.coordinates]},properties},
+    createdAt:previous?.createdAt || new Date().toISOString(),
+    updatedAt:new Date().toISOString(),
+    photoAttachments:allPhotos
+  };
+  busy = true;
+  submitButton.disabled = true;
+  // 先に写真フォルダの選択／許可を要求し、完了ボタンのユーザー操作を保つ。
+  const photoDestinationPromise = photosToAdd.length
+    ? preparePhotoDestinationForSave()
+    : Promise.resolve("none");
+  setStatus("観察記録と写真を自動保存しています…","pending");
+  try {
+    const photoDestination = await photoDestinationPromise;
+    // まずIndexedDBに写真の本体を含めて保存する。
+    // 外部フォルダへのコピーに失敗した場合も記録と写真は残る。
+    await persistAndRender(item);
+    let photoMethod = "";
+    let photoWriteError = null;
+    if (photosToAdd.length) {
+      try {
+        if (photoDestination === "folder") {
+          for (const photo of photosToAdd) {
+            const result = await writePhotoCopy(photo.blob,photo.name);
+            photo.name = result.name;
+            photo.method = "選択フォルダ";
+            photo.path = "./" + result.name;
+            photo.folderName = photoDirectoryHandle?.name || "";
+          }
+          photoMethod = "folder";
+        } else {
+          await downloadPhotoGroup(photosToAdd,
+            `${dateInfo.text.replace(/[- :]/g,"")}_${cleanFilenamePart(species)}_photos.zip`);
+          for (const photo of photosToAdd) {
+            photo.method = "ダウンロード";
+            photo.path = ""; // ダウンロード先の絶対パスを取得できない
+            photo.folderName = "";
+          }
+          photoMethod = "download";
+        }
+      } catch (error) {
+        photoWriteError = error;
+        photoMethod = "error";
+      }
+      setPhotoMetadata(item.feature.properties,item.photoAttachments);
+      // 書き込み後の確定ファイル名も記録へ反映する。
+      try { await persistAndRender(item); }
+      catch (error) { photoWriteError = photoWriteError || error; }
+    }
+    const wasEditing = Boolean(editingId);
+    closeRecordForm();
+    message.textContent = (wasEditing?"更新":"登録")+"しました："+species+"（自動保存済み）";
+    if (photoWriteError) {
+      setStatus("観察記録と写真本体はブラウザ内に保存しましたが、外部コピーに失敗しました："+
+        photoWriteError.message+"。地点をクリックすれば写真をダウンロードできます。","error");
+    } else if (photoMethod === "folder") {
+      message.textContent += " ／ 写真"+photosToAdd.length+"枚を保存先フォルダにコピーしました。";
+    } else if (photoMethod === "download") {
+      message.textContent += " ／ 写真をダウンロードしました。";
+    }
+    const marker = renderedLayers.get(id)?.getLayers()[0];
+    if (marker) marker.openPopup();
+  } catch (error) {
+    setStatus("自動保存できませんでした："+error.message+"。フォームの入力内容はそのままです。","error");
+  } finally {
+    busy = false;
+    submitButton.disabled = false;
+  }
+});
+
+// 「繁殖行動：なし」は他の繁殖行動と同時選択できないようにする。
+document.querySelectorAll('input[name="breeding"]').forEach(box => {
+  box.addEventListener("change", () => {
+    if (!box.checked) return;
+    const choices = document.querySelectorAll('input[name="breeding"]');
+    if (box.value === "なし") {
+      choices.forEach(other => { if (other !== box) other.checked = false; });
+    } else {
+      const none = document.querySelector('input[name="breeding"][value="なし"]');
+      if (none) none.checked = false;
+    }
+    updateNotesRequirement();
+    resetValidationError();
+  });
+});
+
+// 性別の「不明」は、オス・メスとの同時選択を避ける。
+document.querySelectorAll('input[name="sex"]').forEach(box => {
+  box.addEventListener("change", () => {
+    if (!box.checked) return;
+    if (box.value === "不明") {
+      document.querySelectorAll('input[name="sex"]').forEach(other => {
+        if (other !== box) other.checked = false;
+      });
+    } else {
+      const unknown = document.querySelector('input[name="sex"][value="不明"]');
+      if (unknown) unknown.checked = false;
+    }
+  });
+});
+
+// ===========================================================
+// 4. 現在地取得：地図中心へ移動／観察記録を開始
+// 地図中央に表示するだけのボタンは記録データを書き換えない。
+// ===========================================================
+function requestCurrentLocation(startRecord) {
+  if (geolocationBusy) return;
+  if (startRecord && !database) {
+    locationStatus.textContent = "自動保存を利用できないため観察記録を開始できません。";
+    return;
+  }
+  if (!navigator.geolocation) {
+    locationStatus.textContent = "このブラウザでは位置情報を利用できません。";
+    return;
+  }
+  if (startRecord) cancelMapPointSelection();
+  geolocationBusy = true;
+  locationButton.disabled = true;
+  centerLocationButton.disabled = true;
+  locationStatus.textContent = "現在地を取得しています…";
+  navigator.geolocation.getCurrentPosition(
+    position => {
+      geolocationBusy = false;
+      centerLocationButton.disabled = false;
+      locationButton.disabled = !database;
+      const latlng = L.latLng(position.coords.latitude,position.coords.longitude);
+      const accuracy = position.coords.accuracy;
+      // 現在地が地図の中心になる（ズーム16）。
+      map.setView(latlng,16);
+      terrainMoveTo(latlng,16);
+      currentLocationGroup.clearLayers();
+      L.circle(latlng,{
+        radius:accuracy,color:"#1976d2",weight:1,fillColor:"#1976d2",
+        fillOpacity:.11,interactive:false
+      }).addTo(currentLocationGroup);
+      L.circleMarker(latlng,{
+        radius:9,color:"#fff",weight:3,fillColor:"#1976d2",fillOpacity:1
+      }).bindPopup("現在地（推定精度：約"+Math.round(accuracy)+"m）")
+        .addTo(currentLocationGroup);
+      locationStatus.textContent =
+        "現在地：緯度"+latlng.lat.toFixed(6)+" ／ 経度"+latlng.lng.toFixed(6)+
+        " ／ 推定精度：約"+Math.round(accuracy)+"m ／ 二次メッシュ："+
+        (secondMeshCode(latlng.lat,latlng.lng) ?? "算出範囲外");
+      if (startRecord) {
+        openNewForm(latlng,"GPS",accuracy);
+      } else {
+        message.textContent = "";
+      }
+    },
+    error => {
+      geolocationBusy = false;
+      centerLocationButton.disabled = false;
+      locationButton.disabled = !database;
+      const errors = {
+        1:"位置情報の利用が許可されていません。",
+        2:"位置情報を取得できません。",
+        3:"位置情報の取得がタイムアウトしました。"
+      };
+      locationStatus.textContent = errors[error.code] || "現在地を取得できませんでした。";
+    },
+    {enableHighAccuracy:true,timeout:15000,maximumAge:0}
+  );
+}
+centerLocationButton.addEventListener("click", () => requestCurrentLocation(false));
+locationButton.addEventListener("click", () => requestCurrentLocation(true));
+
+// ===========================================================
+// 5. 後から記録：ボタン → 地図を左クリック → 同じフォーム
+// ===========================================================
+const recordAtMapButton = document.getElementById("recordAtMap");
+const mapSelectHint = document.getElementById("mapSelectHint");
+const inputPanel = document.querySelector(".bottom-right");
+let selectingRetrospectivePoint = false;
+
+function cancelMapPointSelection() {
+  selectingRetrospectivePoint = false;
+  inputPanel.classList.remove("selecting-mode");
+  map.getContainer().classList.remove("choosing-point");
+  terrainContainer.classList.remove("choosing-point");
+  recordAtMapButton.classList.remove("grey");
+  recordAtMapButton.textContent = "場所を選んでデータ入力";
+  mapSelectHint.classList.remove("active");
+  mapSelectHint.textContent = "";
+}
+
+recordAtMapButton.addEventListener("click", () => {
+  if (busy || !database) return;
+  if (selectingRetrospectivePoint) {
+    cancelMapPointSelection();
+    message.textContent = "地図での地点指定をキャンセルしました。";
+    return;
+  }
+  // 入力中の記録を意図せず失わないよう確認する
+  if (!recordPanel.hidden) {
+    if (!confirm("入力中のフォームを閉じて、別の地点を指定しますか？")) return;
+    closeRecordForm();
+  }
+  selectingRetrospectivePoint = true;
+  inputPanel.classList.add("selecting-mode");
+  recordAtMapButton.classList.add("grey");
+  recordAtMapButton.textContent = "地点指定をキャンセル";
+  map.getContainer().classList.add("choosing-point");
+  if(terrainSwitch.checked)terrainContainer.classList.add("choosing-point");
+  mapSelectHint.classList.add("active");
+  mapSelectHint.textContent = "地図上の登録したい位置を左クリックしてください（Escキーで中止）。";
+  message.textContent = "";
+});
+
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && selectingRetrospectivePoint) {
+    cancelMapPointSelection();
+    message.textContent = "地図での地点指定をキャンセルしました。";
+  }
+});
+
+// ===========================================================
+// 6. 後から記録：選択モード中の地図クリックだけでフォームを開く
+//    通常時の地図クリックでは記録を作成しない
+// ===========================================================
+map.on("click", event => {
+  if (!selectingRetrospectivePoint) return;
+  cancelMapPointSelection();
+  openNewForm(event.latlng,"後から記録（地図で指定）");
+});
+
+// ===========================================================
+// 6. GeoJSONの読み込み・書き出し
+// ===========================================================
+function featureArray(geojson) {
+  if (geojson?.type === "FeatureCollection" && Array.isArray(geojson.features)) return geojson.features;
+  if (geojson?.type === "Feature") return [geojson];
+  throw new Error("GeoJSON Feature または FeatureCollection を指定してください。");
+}
+document.getElementById("geojsonFile").addEventListener("change", async event => {
+  const file = event.target.files?.[0];
+  if (!file || busy) return;
+  busy = true;
+  setStatus("GeoJSONを読み込み、自動保存しています…","pending");
+  try {
+    const parsed = JSON.parse(await file.text());
+    const features = featureArray(parsed).filter(f => f?.type === "Feature" && f.geometry);
+    if (features.length === 0) throw new Error("読み込める地物がありません。");
+    // Leafletで形状を事前検証する
+    for (const feature of features) L.geoJSON(feature);
+    const now = new Date().toISOString();
+    const items = features.map(feature => {
+      fillFeatureMesh(feature);
+      const id = newId();
+      return {id,feature:{...feature,id},createdAt:now,updatedAt:now};
+    });
+    await putStoredRecords(items); // 一括で成功／失敗
+    const bounds = L.latLngBounds([]);
+    for (const item of items) {
+      const group = renderRecord(item);
+      const b = group.getBounds();
+      if (b.isValid()) bounds.extend(b);
+    }
+    if (bounds.isValid()) map.fitBounds(bounds,{padding:[20,20],maxZoom:15});
+    setStatus("GeoJSONの"+items.length+"件を自動保存しました。合計"+records.size+"レコード。 ");
+    message.textContent = "GeoJSONを読み込みました。";
+  } catch (error) {
+    setStatus("GeoJSONの読み込み・保存に失敗："+error.message,"error");
+  } finally { busy = false; event.target.value = ""; }
+});
+// ===========================================================
+// 7. ファイルのエクスポート（GeoJSON / Excel / CSV）
+// 保存先はブラウザのダウンロード先（通常はダウンロードフォルダ）
+// ===========================================================
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+function buildSpreadsheetData() {
+  const primaryHeaders = [
+    "調査分類群", "調査者名", "観察日時", "種名", "個体数", "年齢", "性別", "環境", "繁殖行動", "確認方法", "備考",
+    "登録方法", "位置精度_m", "写真ファイル名", "写真のアドレス", "写真保存先フォルダ", "写真保存方法", "緯度", "経度", "二次メッシュコード",
+    "地物種別", "登録ID", "登録日時", "更新日時", "GeoJSON座標"
+  ];
+  const extraHeaders = new Set();
+  const rows = [...records.values()].map(item => {
+    const feature = item.feature;
+    const geometry = feature.geometry || {};
+    const point = geometry.type === "Point" && Array.isArray(geometry.coordinates);
+    const properties = feature.properties || {};
+    const row = {
+      ...properties,
+      "調査分類群":properties["調査分類群"] || "",
+      "写真のアドレス":photoRelativePaths(getStoredPhotos(item)) || properties["写真のアドレス"] || "",
+      "写真保存先フォルダ":[...new Set(getStoredPhotos(item).map(p=>p.folderName).filter(Boolean))].join("、") || properties["写真保存先フォルダ"] || "",
+      "緯度":point ? geometry.coordinates[1] : "",
+      "経度":point ? geometry.coordinates[0] : "",
+      "二次メッシュコード":point ? meshCodeForFeature(feature) : "",
+      "地物種別":geometry.type || "",
+      "登録ID":item.id,
+      "登録日時":item.createdAt || "",
+      "更新日時":item.updatedAt || "",
+      "GeoJSON座標":JSON.stringify(geometry.coordinates ?? geometry.geometries ?? null)
+    };
+    // チェックボックスの複数値をExcel内では読める一覧文字列にする。
+    for (const key of ["年齢", "性別", "環境", "繁殖行動", "確認方法"]) {
+      const value = properties[key];
+      row[key] = Array.isArray(value) ? value.join("、") : (value ?? "");
+    }
+    // 他のGeoJSONから読み込まれた任意の属性も失わず書き出す。
+    for (const key of Object.keys(row)) {
+      if (!primaryHeaders.includes(key)) extraHeaders.add(key);
+    }
+    return row;
+  });
+  rows.sort((a,b) => String(a["観察日時"] || a["登録日時"]).localeCompare(
+                       String(b["観察日時"] || b["登録日時"])));
+  const headers = [...primaryHeaders, ...extraHeaders];
+  function scalar(value) {
+    if (value === null || value === undefined) return "";
+    if (typeof value === "object") return JSON.stringify(value);
+    return value;
+  }
+  // CSV/Excelで先頭が = + - @ の文字列が式として実行されるのを防ぐ。
+  function safeValue(value) {
+    value = scalar(value);
+    return typeof value === "string" && /^[\s]*[=+\-@]/.test(value)
+      ? "'" + value : value;
+  }
+  return {headers,rows:rows.map(row => headers.map(h => safeValue(row[h])))};
+}
+
+function buildSpreadsheetWorkbook() {
+  if (!window.XLSX) {
+    throw new Error("Excel出力ライブラリを読み込めません。インターネット接続を確認してください。");
+  }
+  const {headers,rows} = buildSpreadsheetData();
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.aoa_to_sheet([headers,...rows]);
+  worksheet["!cols"] = headers.map(name => ({
+    wch:({"調査分類群":26,"調査者名":20,"観察日時":19,"種名":22,"年齢":16,"性別":16,"環境":26,"繁殖行動":30,"確認方法":24,"備考":42,"登録方法":25,
+          "登録ID":39,"登録日時":25,"更新日時":25,"GeoJSON座標":35,
+          "二次メッシュコード":20,"写真ファイル名":55,"写真のアドレス":60,"写真保存先フォルダ":24,"写真保存方法":22,"緯度":16,"経度":16}[name] || 17)
+  }));
+  worksheet["!autofilter"] = {ref:"A1:"+XLSX.utils.encode_col(headers.length-1)+(rows.length+1)};
+  XLSX.utils.book_append_sheet(workbook,worksheet,"観察記録");
+  return workbook;
+}
+
+function exportSpreadsheetXLSX(filename) {
+  XLSX.writeFile(buildSpreadsheetWorkbook(),filename,{compression:true});
+}
+
+function getGeoJSONObject() {
+  return {type:"FeatureCollection",features:[...records.values()].map(item => {
+    const feature = JSON.parse(JSON.stringify(item.feature));
+    fillFeatureMesh(feature);
+    return feature;
+  })};
+}
+
+function getJSONString() {
+  return JSON.stringify(getGeoJSONObject(),null,2);
+}
+
+function exportJSON(filename) {
+  downloadBlob(new Blob([getJSONString()],{type:"application/json;charset=utf-8"}),filename);
+}
+
+let exporting = false;
+document.getElementById("exportData").addEventListener("click", async () => {
+  if (exporting) return;
+  const useJSON = document.getElementById("exportJSON").checked;
+  const useXLSX = document.getElementById("exportXLSX").checked;
+  if (!useJSON && !useXLSX) {
+    alert("JSONまたはスプレッドシートを1つ以上チェックしてください。");
+    return;
+  }
+  const basename = "observation_records_"+new Date().toLocaleDateString("sv-SE");
+  const button = document.getElementById("exportData");
+  exporting = true;
+  button.disabled = true;
+  try {
+    if (useJSON && useXLSX) {
+      if (!window.JSZip) throw new Error("ZIP出力ライブラリが利用できません。インターネット接続をご確認ください。");
+      const zip = new JSZip();
+      zip.file(basename+".json",getJSONString());
+      const book = buildSpreadsheetWorkbook();
+      const bytes = XLSX.write(book,{bookType:"xlsx",type:"array",compression:true});
+      zip.file(basename+".xlsx",bytes);
+      const blob = await zip.generateAsync({type:"blob",compression:"DEFLATE"});
+      downloadBlob(blob,basename+".zip");
+      message.textContent = "JSONとExcelをまとめたZIPファイルを書き出しました。";
+    } else if (useJSON) {
+      exportJSON(basename+".json");
+      message.textContent = "JSONファイルを書き出しました。";
+    } else {
+      exportSpreadsheetXLSX(basename+".xlsx");
+      message.textContent = "スプレッドシート（Excel）を書き出しました。";
+    }
+    message.textContent += " 保存先はブラウザのダウンロード設定に従います。";
+  } catch (error) {
+    message.textContent = "書き出しに失敗しました："+error.message;
+    alert(message.textContent);
+  } finally {
+    exporting = false;
+    button.disabled = !database;
+  }
+});
+document.getElementById("clearData").addEventListener("click", async () => {
+  if (busy || !confirm("自動保存済みのすべての記録を削除しますか？この操作は元に戻せません。")) return;
+  busy = true;
+  try {
+    await clearStoredRecords();
+    records.clear();
+    renderedLayers.clear();
+    featureGroup.clearLayers();
+    closeRecordForm();
+    updateCount();
+    setStatus("すべての記録を削除しました（保存データも削除済み）。");
+    message.textContent = "データをすべて削除しました。";
+  } catch (error) { setStatus("削除に失敗："+error.message,"error"); }
+  finally { busy = false; }
+});
+
+// ===========================================================
+// 8. 起動時に自動復元
+// ===========================================================
+async function initialize() {
+  try {
+    database = await openDatabase();
+    try {
+      photoDirectoryHandle = await getStoredPreference("photoDirectoryHandle");
+      if (photoDirectoryHandle) {
+        photoFolderStatus.textContent = "前回の保存先："+photoDirectoryHandle.name;
+      } else if (!window.showDirectoryPicker) {
+        photoFolderStatus.textContent = "このブラウザでは写真を直接フォルダ保存できません。写真はダウンロードされます（複数の場合はZIP）。";
+      }
+      try {
+        photoSourceDirectoryHandle = await getStoredPreference("photoSourceDirectoryHandle");
+        if (photoSourceDirectoryHandle) {
+          photoSourceFolderStatus.textContent = "前回の写真選択元：" + photoSourceDirectoryHandle.name;
+        }
+      } catch (e) { console.warn("写真選択元フォルダを復元できません：",e); }
+    } catch (e) {
+      photoFolderStatus.textContent = "写真の保存先設定を読み込めません："+e.message;
+    }
+    const stored = await getStoredRecords();
+    // 以前のバージョンで保存した地点にも二次メッシュコードを付与し、
+    // 同じIndexedDB内の記録を更新して今後の起動時も保持する。
+    const meshUpdates = stored.filter(item => fillFeatureMesh(item.feature));
+    if (meshUpdates.length) await putStoredRecords(meshUpdates);
+    for (const item of stored) {
+      try { renderRecord(item); }
+      catch (error) { console.warn("復元できない地物をスキップ：", item.id, error); }
+    }
+    const latest = [...stored].sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)))[0];
+    if (latest?.feature?.geometry?.type === "Point") {
+      const [lng,lat] = latest.feature.geometry.coordinates;
+      if (Number.isFinite(lng) && Number.isFinite(lat)) map.setView([lat,lng],14);
+    }
+    ["getLocation","recordAtMap","geojsonFile","exportData","clearData"].forEach(id=>{
+      document.getElementById(id).disabled = false;
+    });
+    setStatus("自動保存：有効 ／ 前回の記録を"+records.size+"件復元しました。"+
+      (meshUpdates.length ? " 二次メッシュコードを"+meshUpdates.length+"件に追加しました。" : ""));
+  } catch (error) {
+    setStatus("自動保存を開始できません："+error.message+"。別タブで旧版を開いている場合は閉じてから再読み込みしてください。","error");
+    message.textContent = "保存機能の初期化に失敗しました。左下のエラー内容を確認してください。";
+  }
+  map.invalidateSize();
+}
+
+// ===========================================================
+// 重ねる地図：XYZ/WMS、GeoJSON、GeoTIFF
+// 別IndexedDBに保存し、観察記録とは独立して管理する。
+// ===========================================================
+const overlayDetails = document.getElementById("overlayDetails");
+const overlayDropZone = document.getElementById("overlayDropZone");
+const overlayFileInput = document.getElementById("overlayFileInput");
+const overlayUrlType = document.getElementById("overlayUrlType");
+const overlayUrlInput = document.getElementById("overlayUrl");
+const overlayNameInput = document.getElementById("overlayName");
+const overlayWmsLayersInput = document.getElementById("overlayWmsLayers");
+const overlayListElement = document.getElementById("overlayList");
+const overlayStatusElement = document.getElementById("overlayStatus");
+const OVERLAY_DB_NAME = "wildlife_webgis_overlay_layers_v1";
+const OVERLAY_STORE = "layers";
+const externalOverlays = new Map();
+let overlayDatabase = null;
+let overlayLibsPromise = null;
+
+map.createPane("externalRasterPane");
+map.getPane("externalRasterPane").style.zIndex = "350";
+map.getPane("externalRasterPane").style.pointerEvents = "none";
+
+function overlayStatus(text, error=false) {
+  overlayStatusElement.textContent = text;
+  overlayStatusElement.classList.toggle("overlay-error", error);
+}
+function overlayId() {
+  return "overlay_" + (crypto.randomUUID ? crypto.randomUUID() : Date.now()+"_"+Math.random().toString(36).slice(2));
+}
+function overlayOpenDatabase() {
+  return new Promise((resolve,reject)=>{
+    if (!window.indexedDB) return reject(new Error("IndexedDBが利用できません"));
+    const req=indexedDB.open(OVERLAY_DB_NAME,1);
+    req.onupgradeneeded=()=>{
+      if (!req.result.objectStoreNames.contains(OVERLAY_STORE))
+        req.result.createObjectStore(OVERLAY_STORE,{keyPath:"id"});
+    };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error || new Error("レイヤー保存先を開けません"));
+    req.onblocked=()=>reject(new Error("別タブのためレイヤー保存先を開けません"));
+  });
+}
+function overlayDbRequest(mode, action) {
+  if (!overlayDatabase) return Promise.resolve(null);
+  return new Promise((resolve,reject)=>{
+    const tr=overlayDatabase.transaction(OVERLAY_STORE,mode);
+    const store=tr.objectStore(OVERLAY_STORE);
+    let result;
+    try { result=action(store); }
+    catch(e) {reject(e);return;}
+    tr.oncomplete=()=>resolve(result?.result ?? null);
+    tr.onerror=()=>reject(tr.error || new Error("レイヤー保存に失敗"));
+    tr.onabort=()=>reject(tr.error || new Error("レイヤー保存が中止されました"));
+  });
+}
+function persistExternalOverlay(descriptor) {
+  return overlayDbRequest("readwrite", store=>store.put(descriptor));
+}
+function deleteExternalOverlay(id) {
+  return overlayDbRequest("readwrite", store=>store.delete(id));
+}
+function getStoredExternalOverlays() {
+  return overlayDbRequest("readonly", store=>store.getAll());
+}
+function waitForScript(url,globalName) {
+  if (window[globalName]) return Promise.resolve();
+  return new Promise((resolve,reject)=>{
+    const script=document.createElement("script");
+    script.src=url;
+    script.async=true;
+    script.onload=()=>window[globalName] ? resolve() : reject(new Error(globalName+"を読み込めません"));
+    script.onerror=()=>reject(new Error("地図用ライブラリを読み込めませんでした（通信状態を確認してください）"));
+    document.head.appendChild(script);
+  });
+}
+async function loadRasterLibraries() {
+  if (!overlayLibsPromise) {
+    overlayLibsPromise=(async()=>{
+      await waitForScript("https://cdn.jsdelivr.net/npm/georaster@1.6.0/dist/georaster.browser.bundle.min.js","parseGeoraster");
+      await waitForScript("https://cdn.jsdelivr.net/npm/georaster-layer-for-leaflet@4.1.2/dist/georaster-layer-for-leaflet.min.js","GeoRasterLayer");
+    })().catch(error=>{
+      overlayLibsPromise=null;
+      throw error;
+    });
+  }
+  await overlayLibsPromise;
+}
+function overlayVectorStyle(alpha) {
+  return {color:"#2176b7",weight:2,opacity:alpha,fillColor:"#49a0bf",fillOpacity:alpha*0.32};
+}
+function overlayVectorPopup(feature) {
+  const props=feature?.properties;
+  if (!props || typeof props!=="object") return null;
+  const keys=Object.keys(props).slice(0,24);
+  if (!keys.length) return null;
+  const box=document.createElement("div");
+  box.style.maxHeight="240px";
+  box.style.overflowY="auto";
+  for (const key of keys) {
+    const row=document.createElement("div");
+    const bold=document.createElement("strong");
+    bold.textContent=key+"：";
+    row.append(bold,document.createTextNode(Array.isArray(props[key]) ? props[key].join("、") : String(props[key]??"")));
+    box.append(row);
+  }
+  return box;
+}
+function overlayRasterColorizer(raster) {
+  const nodata=raster.noDataValue;
+  const bands=Number(raster.numberOfRasters)||raster.mins?.length||1;
+  const lo=Number(raster.mins?.[0]??0);
+  const hi=Number(raster.maxs?.[0]??255);
+  const categorical=bands===1 && Number.isInteger(lo) && Number.isInteger(hi) && hi-lo<=128 && hi-lo>0;
+  return values=>{
+    if (!Array.isArray(values)||!values.length || values.some(v=>v===null||v===undefined||!Number.isFinite(v)) || (nodata!==undefined && nodata!==null && values[0]===nodata)) return null;
+    const clamp=n=>Math.max(0,Math.min(255,Math.round(n)));
+    if (bands>=3) {
+      return `rgb(${clamp(values[0])},${clamp(values[1])},${clamp(values[2])})`;
+    }
+    if (raster.palette && raster.palette[values[0]]) {
+      const p=raster.palette[values[0]];
+      if (typeof p==="string") return p;
+      if (Array.isArray(p)) return `rgb(${clamp(p[0])},${clamp(p[1])},${clamp(p[2])})`;
+    }
+    if (categorical) {
+      const idx=Math.trunc(values[0]);
+      const hue=((idx*137.508)%360+360)%360;
+      return `hsl(${hue},65%,54%)`;
+    }
+    const ratio=hi>lo ? (values[0]-lo)/(hi-lo) : 0.5;
+    const c=clamp(Math.max(0,Math.min(1,ratio))*255);
+    return `rgb(${c},${c},${c})`;
+  };
+}
+async function createExternalLeafletLayer(item) {
+  const opacity=Math.max(0,Math.min(1,Number(item.opacity??0.75)));
+  if (item.kind==="xyz") {
+    if (!/\{z\}/i.test(item.url) || !/\{x\}/i.test(item.url) || !/\{y\}/i.test(item.url))
+      throw new Error("XYZタイルURLには {z}、{x}、{y} が必要です。");
+    return L.tileLayer(item.url,{
+      pane:"externalRasterPane",minZoom:0,maxZoom:22,maxNativeZoom:20,
+      opacity,attribution:item.attribution||"外部タイル"
+    });
+  }
+  if (item.kind==="wms") {
+    if (!item.layers) throw new Error("WMSはレイヤー名を指定してください。");
+    return L.tileLayer.wms(item.url,{
+      layers:item.layers,format:"image/png",transparent:true,version:"1.3.0",
+      pane:"externalRasterPane",opacity,attribution:"外部WMS"
+    });
+  }
+  if (item.kind==="geojson" || item.kind==="geojson-url") {
+    const text=item.blob ? await item.blob.text() : await fetchOverlayText(item.url);
+    let data;
+    try {data=JSON.parse(text);} catch {throw new Error("JSONファイルを解析できませんでした。");}
+    if (!["Feature","FeatureCollection","GeometryCollection","Point","MultiPoint","LineString","MultiLineString","Polygon","MultiPolygon"].includes(data?.type))
+      throw new Error("GeoJSON形式ではありません。GeoJSONのジオメトリまたはFeatureCollectionを指定してください。");
+    const layer=L.geoJSON(data,{
+      style:()=>overlayVectorStyle(opacity),
+      pointToLayer:(_,latlng)=>L.circleMarker(latlng,{radius:6,...overlayVectorStyle(opacity)}),
+      onEachFeature:(feature,child)=>{
+        const popup=overlayVectorPopup(feature);
+        if (popup) child.bindPopup(popup);
+      }
+    });
+    if (layer.getLayers().length===0) throw new Error("表示できるGeoJSON地物がありません。");
+    return layer;
+  }
+  if (item.kind==="geotiff" || item.kind==="geotiff-url") {
+    await loadRasterLibraries();
+    const buffer=item.blob ? await item.blob.arrayBuffer() : await fetchOverlayBuffer(item.url);
+    const raster=await window.parseGeoraster(buffer);
+    const layer=new window.GeoRasterLayer({
+      georaster:raster,pane:"externalRasterPane",opacity,resolution:64,
+      pixelValuesToColorFn:overlayRasterColorizer(raster)
+    });
+    if (!layer.getBounds()?.isValid()) throw new Error("GeoTIFFから位置情報を取得できません。座標付きGeoTIFFが必要です。");
+    return layer;
+  }
+  throw new Error("未対応のレイヤー形式です。");
+}
+async function fetchOverlayText(url) {
+  const response=await fetch(url,{mode:"cors"});
+  if (!response.ok) throw new Error("取得に失敗しました（HTTP "+response.status+"）");
+  return response.text();
+}
+async function fetchOverlayBuffer(url) {
+  const response=await fetch(url,{mode:"cors"});
+  if (!response.ok) throw new Error("取得に失敗しました（HTTP "+response.status+"）");
+  return response.arrayBuffer();
+}
+function getOverlayBounds(layer) {
+  try {const b=layer.getBounds?.();return b?.isValid?.()?b:null;}catch{return null;}
+}
+function showOverlayList() {
+  overlayListElement.replaceChildren();
+  for (const [id,entry] of externalOverlays) {
+    const item=entry.item;
+    const row=document.createElement("div");row.className="overlay-row";
+    const head=document.createElement("div");head.className="overlay-row-head";
+    const label=document.createElement("label");
+    const checkbox=document.createElement("input");checkbox.type="checkbox";checkbox.checked=item.visible!==false;
+    checkbox.setAttribute("aria-label",item.name+"の表示切り替え");
+    const name=document.createElement("span");name.textContent=item.name;
+    label.append(checkbox,name);
+    checkbox.addEventListener("change",()=>{
+      item.visible=checkbox.checked;
+      if (checkbox.checked) entry.layer.addTo(map);
+      else map.removeLayer(entry.layer);
+      void persistExternalOverlay(item).catch(e=>overlayStatus("表示設定を保存できません："+e.message,true));
+      if (typeof syncDrapedGeoTIFFs3D === "function") void syncDrapedGeoTIFFs3D();
+    });
+    const fit=document.createElement("button");fit.type="button";fit.textContent="移動";
+    fit.title="レイヤーの範囲に移動";
+    fit.addEventListener("click",()=>{
+      const b=getOverlayBounds(entry.layer);
+      if (b) {
+        map.fitBounds(b,{padding:[16,16],maxZoom:16});
+        if (typeof terrainMap !== "undefined" && terrainSwitch?.checked && terrainMap && terrain3DReady)
+          terrainMap.fitBounds([[b.getWest(),b.getSouth()],[b.getEast(),b.getNorth()]],{padding:24,maxZoom:16});
+      }
+      else overlayStatus("この地図は表示範囲を指定できません。",true);
+    });
+    const remove=document.createElement("button");remove.type="button";remove.textContent="削除";
+    remove.style.background="#ad4141";
+    remove.addEventListener("click",async()=>{
+      map.removeLayer(entry.layer);externalOverlays.delete(id);
+      if (typeof removeDrapedGeoTIFF3D === "function") removeDrapedGeoTIFF3D(id);
+      showOverlayList();
+      try{await deleteExternalOverlay(id);overlayStatus(item.name+" を削除しました。");}
+      catch(e){overlayStatus("レイヤー削除はできましたが、保存先から削除できません："+e.message,true);}
+    });
+    head.append(label,fit,remove);
+    const sub=document.createElement("div");sub.className="overlay-row-sub";
+    const alpha=document.createElement("input");alpha.type="range";alpha.min="0";alpha.max="100";alpha.step="5";
+    alpha.value=String(Math.round(Number(item.opacity??0.75)*100));
+    alpha.setAttribute("aria-label",item.name+"の透明度");
+    const value=document.createElement("span");value.textContent=alpha.value+"%";
+    alpha.addEventListener("input",()=>{
+      item.opacity=Number(alpha.value)/100;value.textContent=alpha.value+"%";
+      if (typeof entry.layer.setOpacity==="function") entry.layer.setOpacity(item.opacity);
+      else if (typeof entry.layer.setStyle==="function") entry.layer.setStyle(overlayVectorStyle(item.opacity));
+      if (typeof updateDrapedOpacity3D === "function") updateDrapedOpacity3D(id);
+    });
+    alpha.addEventListener("change",()=>void persistExternalOverlay(item).catch(e=>overlayStatus("透明度を保存できません："+e.message,true)));
+    sub.append(alpha,value);row.append(head,sub);overlayListElement.append(row);
+  }
+}
+async function addExternalOverlay(item,{restore=false}={}) {
+  overlayStatus("地図を読み込んでいます："+item.name);
+  const layer=await createExternalLeafletLayer(item);
+  if (externalOverlays.has(item.id)) map.removeLayer(externalOverlays.get(item.id).layer);
+  externalOverlays.set(item.id,{item,layer});
+  if (item.visible!==false) layer.addTo(map);
+  showOverlayList();
+  if (typeof syncDrapedGeoTIFFs3D === "function" && terrainSwitch?.checked && terrain3DReady) {
+    void syncDrapedGeoTIFFs3D();
+  }
+  if (!restore) {
+    const bounds=getOverlayBounds(layer);
+    if (bounds) {
+      map.fitBounds(bounds,{padding:[20,20],maxZoom:16});
+      if (terrainSwitch?.checked && terrainMap && terrain3DReady)
+        terrainMap.fitBounds([[bounds.getWest(),bounds.getSouth()],[bounds.getEast(),bounds.getNorth()]],{padding:26,maxZoom:16});
+    }
+    try {
+      await persistExternalOverlay(item);
+      overlayStatus(item.name+" を追加・保存しました。");
+    } catch(e) {
+      overlayStatus(item.name+" を表示しましたが、再起動後の復元用保存に失敗しました："+e.message,true);
+    }
+  }
+  return layer;
+}
+function normalizeOverlayFileKind(file) {
+  const filename=file.name.toLowerCase();
+  if (/\.(geojson|json)$/.test(filename)) return "geojson";
+  if (/\.(tif|tiff)$/.test(filename)) return "geotiff";
+  return null;
+}
+async function addOverlayFiles(files) {
+  const arr=Array.from(files||[]);
+  for (const file of arr) {
+    const kind=normalizeOverlayFileKind(file);
+    if (!kind) {overlayStatus("未対応のファイル："+file.name,true);continue;}
+    if (file.size>300*1024*1024) {overlayStatus("大容量ファイルは300MB以下を推奨します："+file.name,true);continue;}
+    const item={id:overlayId(),name:file.name,kind,blob:file,visible:true,opacity:0.75,createdAt:Date.now()};
+    try {await addExternalOverlay(item);}catch(e){overlayStatus(file.name+"："+e.message,true);console.error(e);}
+  }
+}
+overlayDropZone.addEventListener("click",()=>overlayFileInput.click());
+overlayDropZone.addEventListener("keydown",e=>{
+  if (e.key==="Enter"||e.key===" ") {e.preventDefault();overlayFileInput.click();}
+});
+overlayFileInput.addEventListener("change",async()=>{
+  await addOverlayFiles(overlayFileInput.files);
+  overlayFileInput.value="";
+});
+for (const ev of ["dragenter","dragover"]) overlayDropZone.addEventListener(ev,e=>{
+  e.preventDefault();e.stopPropagation();overlayDropZone.classList.add("drag-over");
+});
+for (const ev of ["dragleave","drop"]) overlayDropZone.addEventListener(ev,e=>{
+  e.preventDefault();e.stopPropagation();overlayDropZone.classList.remove("drag-over");
+});
+overlayDropZone.addEventListener("drop",e=>void addOverlayFiles(e.dataTransfer?.files));
+// 既に表示されている小さなパネルへファイルを落としても読み込める。
+overlayDetails.addEventListener("dragover",e=>{if(e.dataTransfer?.types?.includes("Files")){e.preventDefault();}});
+overlayDetails.addEventListener("drop",e=>{
+  if(e.target===overlayDropZone || overlayDropZone.contains(e.target))return;
+  if(e.dataTransfer?.files?.length){e.preventDefault();e.stopPropagation();void addOverlayFiles(e.dataTransfer.files);}
+});
+overlayUrlType.addEventListener("change",()=>{
+  document.getElementById("overlayWmsOptions").hidden=overlayUrlType.value!=="wms";
+  overlayUrlInput.placeholder=overlayUrlType.value==="xyz"
+    ? "https://example.jp/{z}/{x}/{y}.png"
+    : "https://example.jp/...";
+});
+document.getElementById("overlayAddUrl").addEventListener("click",async()=>{
+  const url=overlayUrlInput.value.trim();
+  if (!/^https?:\/\//i.test(url)) {overlayStatus("https:// または http:// で始まるURLを入力してください。",true);return;}
+  const kind=overlayUrlType.value;
+  const names={xyz:"XYZタイル",wms:"WMS", "geojson-url":"GeoJSON","geotiff-url":"GeoTIFF"};
+  const item={id:overlayId(),kind,url,visible:true,opacity:0.75,
+    name:overlayNameInput.value.trim()||names[kind],layers:kind==="wms"?overlayWmsLayersInput.value.trim():"",
+    createdAt:Date.now()};
+  try {await addExternalOverlay(item);overlayUrlInput.value="";overlayNameInput.value="";}
+  catch(e){overlayStatus(e.message+(kind==="geojson-url"||kind==="geotiff-url"?"（URLの公開設定・CORSを確認してください）":""),true);console.error(e);}
+});
+async function initializeExternalOverlays() {
+  try {
+    overlayDatabase=await overlayOpenDatabase();
+    const saved=await getStoredExternalOverlays();
+    if (!saved?.length) return;
+    for (const item of saved) {
+      try {await addExternalOverlay(item,{restore:true});}
+      catch(e){console.warn("重ね合わせ地図を復元できません",item.name,e);overlayStatus("復元できないレイヤーがあります："+item.name,true);}
+    }
+    if (saved.length===externalOverlays.size) overlayStatus(saved.length+"件の重ね合わせ地図を復元しました。");
+    if (typeof syncDrapedGeoTIFFs3D === "function" && terrainSwitch?.checked && terrain3DReady)
+      void syncDrapedGeoTIFFs3D();
+  } catch(e) {
+    overlayStatus("地図は追加できますが再起動後の復元は利用できません："+e.message,true);
+  }
+}
+void initializeExternalOverlays();
+
+initialize();
+
+// ===========================================================
+// 9. 3D 地形表示（国土地理院 DEM1A 1mメッシュ）
+// MapLibreの3D terrainが認識できるMapbox RGB標高タイルへ
+// GSIのDEM1A PNGをブラウザで変換する。外部サーバーへの転送はしない。
+// 1m DEM未提供の画素は高さ0mを使う（測量値とは見なさない）。
+// ===========================================================
+const terrainSwitch = document.getElementById("terrainSwitch");
+const terrainStatus = document.getElementById("terrainStatus");
+const terrainContainer = document.getElementById("map3d");
+let terrainMap = null;
+let terrain3DReady = false;
+let terrainRequestSequence = 0;
+let terrainMissingTiles = 0;
+let terrainValidTiles = 0;
+let terrainProtocolAdded = false;
+let terrainLoadingPromise = null;
+let terrainFlatTilePromise = null;
+let terrainLastNetworkError = "";
+const TERRAIN_BASE_CREDIT = '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener noreferrer">国土地理院</a>';
+
+function terrainMessage(text, error=false) {
+  terrainStatus.textContent = text;
+  terrainStatus.hidden = !text;
+  terrainStatus.classList.toggle("error", Boolean(error));
+}
+function terrainCurrentBasemap() {
+  return document.querySelector('input[name="basemap"]:checked')?.value || "standard";
+}
+function terrainBasemapLayers() {
+  if (!terrainMap || !terrain3DReady) return;
+  const value = terrainCurrentBasemap();
+  for (const id of ["terrain-std", "terrain-pale", "terrain-sat", "terrain-photo"]) {
+    if (!terrainMap.getLayer(id)) continue;
+    const visible = id === (value === "standard" ? "terrain-std" : value === "pale" ? "terrain-pale" : "terrain-sat") ||
+       (value === "aerial" && id === "terrain-photo");
+    terrainMap.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
+  }
+}
+function terrainRecordsGeoJSON() {
+  return {
+    type:"FeatureCollection",
+    features:[...records.values()].filter(item =>
+      item?.feature?.geometry?.type === "Point" && Array.isArray(item.feature.geometry.coordinates)
+    ).map(item => ({
+      type:"Feature", id:String(item.id), geometry:item.feature.geometry,
+      properties:{
+        "記録ID":String(item.id),
+        "種名":String(item.feature.properties?.["種名"] || "記録地点"),
+        "分類群":String(item.feature.properties?.["調査分類群"] || ""),
+        "color":markerColorForFeature(item.feature)
+      }
+    }))
+  };
+}
+function refresh3DObservationPoints() {
+  if (!terrain3DReady || !terrainMap) return;
+  const source=terrainMap.getSource("observations3d");
+  if (source && typeof source.setData === "function") source.setData(terrainRecordsGeoJSON());
+}
+// 正規の地理院標高PNG形式: x=65536R+256G+B、x>2^23は負値、単位0.01m。
+// Mapbox TerrainRGB形式: height=-10000+(65536R+256G+B)*0.1m。
+// 利用時に0.01mの元標高が0.1m単位に丸められる点に注意。
+async function terrainEncodeCanvas(canvas) {
+  let output;
+  if (typeof canvas.convertToBlob === "function") output=await canvas.convertToBlob({type:"image/png"});
+  else output=await new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error("標高タイル変換に失敗")),"image/png"));
+  return output.arrayBuffer();
+}
+function terrainCanvas() {
+  const canvas = (typeof OffscreenCanvas !== "undefined") ? new OffscreenCanvas(256,256) : document.createElement("canvas");
+  canvas.width=256;canvas.height=256;
+  return canvas;
+}
+async function terrainFlatTile() {
+  if (terrainFlatTilePromise) return terrainFlatTilePromise;
+  terrainFlatTilePromise=(async()=>{
+    const canvas=terrainCanvas(); const ctx=canvas.getContext("2d",{willReadFrequently:true});
+    const im=ctx.createImageData(256,256);
+    // 0m => 100000 = 0x0186a0
+    for(let i=0;i<im.data.length;i+=4){im.data[i]=1;im.data[i+1]=134;im.data[i+2]=160;im.data[i+3]=255;}
+    ctx.putImageData(im,0,0);return terrainEncodeCanvas(canvas);
+  })();
+  return terrainFlatTilePromise;
+}
+async function terrainDecodeImage(blob) {
+  let bitmap;
+  if (typeof createImageBitmap === "function") bitmap=await createImageBitmap(blob);
+  else bitmap=await new Promise((resolve,reject)=>{
+    const image=new Image();const url=URL.createObjectURL(blob);
+    image.onload=()=>{URL.revokeObjectURL(url);resolve(image);};
+    image.onerror=()=>{URL.revokeObjectURL(url);reject(new Error("DEM PNGの読込失敗"));};
+    image.src=url;
+  });
+  const canvas=terrainCanvas();const ctx=canvas.getContext("2d",{willReadFrequently:true});
+  ctx.drawImage(bitmap,0,0,256,256);
+  if (typeof bitmap.close==="function") bitmap.close();
+  const src=ctx.getImageData(0,0,256,256), dst=ctx.createImageData(256,256);
+  let valid=0;
+  for(let i=0;i<src.data.length;i+=4){
+    const x=src.data[i]*65536+src.data[i+1]*256+src.data[i+2];
+    let h=0;
+    if(src.data[i+3]!==0 && x!==8388608){
+      h=(x<8388608?x:x-16777216)*0.01;
+      valid++;
+    }
+    const rgb=Math.max(0,Math.min(16777215,Math.round((h+10000)*10)));
+    dst.data[i]=Math.floor(rgb/65536);
+    dst.data[i+1]=Math.floor(rgb/256)%256;
+    dst.data[i+2]=rgb%256;
+    dst.data[i+3]=255;
+  }
+  ctx.putImageData(dst,0,0);
+  return {data:await terrainEncodeCanvas(canvas),valid};
+}
+async function terrainDemProtocol(params,abortController) {
+  const match=/^gsi-dem:\/\/tiles\/(\d+)\/(\d+)\/(\d+)\.png(?:\?.*)?$/.exec(params.url);
+  if(!match) throw new Error("不正なDEMタイルURLです。");
+  const z=Number(match[1]),x=Number(match[2]),y=Number(match[3]);
+  const url=`https://cyberjapandata.gsi.go.jp/xyz/dem1a_png/${z}/${x}/${y}.png`;
+  try {
+    const response=await fetch(url,{signal:abortController?.signal,mode:"cors"});
+    if(!response.ok){
+      if(response.status!==404) terrainLastNetworkError=`標高タイル HTTP ${response.status}`;
+      terrainMissingTiles++;return {data:await terrainFlatTile()};
+    }
+    const converted=await terrainDecodeImage(await response.blob());
+    if(converted.valid===0) terrainMissingTiles++;
+    else terrainValidTiles++;
+    if(terrainSwitch.checked && terrainValidTiles+terrainMissingTiles>0){
+      if(terrainValidTiles===0) terrainMessage("この範囲では1m DEMが未提供の可能性があります。平坦に表示します。",true);
+      else if(terrainMissingTiles) terrainMessage("3D表示中：DEM1A（1m）／一部未提供区域は平坦表示");
+      else terrainMessage("3D表示中：国土地理院DEM1A（1m）");
+    }
+    return {data:converted.data};
+  } catch(error){
+    if(error?.name==="AbortError") throw error;
+    terrainLastNetworkError=error.message||"通信エラー";
+    terrainMissingTiles++;
+    if(terrainSwitch.checked) terrainMessage("DEM1Aを取得できません（通信・CORS・提供範囲を確認）。",true);
+    return {data:await terrainFlatTile()};
+  }
+}
+function addTerrainProtocol() {
+  if(terrainProtocolAdded) return;
+  window.maplibregl.addProtocol("gsi-dem",terrainDemProtocol);
+  terrainProtocolAdded=true;
+}
+function terrainRastersStyle() {
+  const xyz = (tile,maxzoom)=>({type:"raster",tiles:[`https://cyberjapandata.gsi.go.jp/xyz/${tile}/{z}/{x}/{y}.${tile==="seamlessphoto"?"jpg":"png"}`],tileSize:256,maxzoom,attribution:TERRAIN_BASE_CREDIT});
+  return {
+    version:8,
+    sources:{
+      "std3d":xyz("std",18), "pale3d":xyz("pale",18),
+      "sat3d":xyz("lndst",13), "photo3d":xyz("seamlessphoto",18),
+      "dem1a3d":{
+        type:"raster-dem",tiles:["gsi-dem://tiles/{z}/{x}/{y}.png"],
+        tileSize:256,minzoom:1,maxzoom:17,encoding:"mapbox",attribution:TERRAIN_BASE_CREDIT
+      },
+      "observations3d":{type:"geojson",data:terrainRecordsGeoJSON()}
+    },
+    layers:[
+      {id:"terrain-std",type:"raster",source:"std3d",layout:{visibility:"visible"}},
+      {id:"terrain-pale",type:"raster",source:"pale3d",layout:{visibility:"none"}},
+      {id:"terrain-sat",type:"raster",source:"sat3d",maxzoom:14,layout:{visibility:"none"}},
+      {id:"terrain-photo",type:"raster",source:"photo3d",minzoom:14,layout:{visibility:"none"}},
+      {id:"observations-points-3d",type:"circle",source:"observations3d",paint:{
+        "circle-radius":7,"circle-color":["get","color"],
+        "circle-stroke-color":"#ffffff","circle-stroke-width":2
+      }}
+    ]
+  };
+}
+function setupTerrain3DEvents() {
+  terrainMap.on("click",event=>{
+    if(!selectingRetrospectivePoint) return;
+    cancelMapPointSelection();
+    openNewForm(L.latLng(event.lngLat.lat,event.lngLat.lng),"3D地図で地点指定");
+  });
+  terrainMap.on("click","observations-points-3d",event=>{
+    if(selectingRetrospectivePoint) return;
+    const f=event.features?.[0]; if(!f) return;
+    const id=String(f.properties?.["記録ID"]||"");
+    const item=records.get(id);
+    if(!item) return;
+    const box=document.createElement("div");
+    const label=document.createElement("strong");
+    label.textContent=(item.feature.properties?.["種名"]||"記録地点");
+    const sub=document.createElement("div");
+    sub.textContent=(item.feature.properties?.["調査分類群"]||"")+" / "+(item.feature.properties?.["観察日時"]||"");
+    const edit=document.createElement("button");edit.type="button";edit.textContent="記録を編集";
+    edit.style.cssText="padding:6px 10px;font-size:12px;margin-top:8px";
+    edit.onclick=()=>{ terrainMap.getContainer().querySelector(".maplibregl-popup-close-button")?.click();openEditForm(id); };
+    box.append(label,sub,edit);
+    new window.maplibregl.Popup({offset:12,maxWidth:"250px"})
+      .setLngLat(event.lngLat).setDOMContent(box).addTo(terrainMap);
+  });
+  terrainMap.on("mousemove","observations-points-3d",()=>{if(!selectingRetrospectivePoint) terrainMap.getCanvas().style.cursor="pointer";});
+  terrainMap.on("mouseleave","observations-points-3d",()=>{terrainMap.getCanvas().style.cursor="";});
+  terrainMap.on("moveend",()=>{
+    if(!terrainSwitch.checked) return;
+    const c=terrainMap.getCenter();map.setView([c.lat,c.lng],terrainMap.getZoom(),{animate:false});
+  });
+  terrainMap.on("error",error=>{
+    const msg=error?.error?.message||"";
+    if(/webgl|shader|context/i.test(msg)) terrainMessage("3D描画エラー："+msg,true);
+  });
+}
+async function activate3DTerrain(){
+  const token=++terrainRequestSequence;
+  terrainSwitch.setAttribute("aria-checked","true");
+  terrainMessage("国土地理院の1m DEMを使用して3D地形を準備しています…");
+  terrainContainer.hidden=false;
+  document.getElementById("terrainCredits").hidden=false;
+  try {
+    if(!terrainLoadingPromise) terrainLoadingPromise=waitForScript(
+      "https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js","maplibregl"
+    ).catch(error=>{terrainLoadingPromise=null;throw error;});
+    await terrainLoadingPromise;
+    if(!terrainSwitch.checked||token!==terrainRequestSequence)return;
+    if(typeof window.maplibregl.supported === "function" && !window.maplibregl.supported()) throw new Error("この端末ではWebGLによる3D表示が利用できません。");
+    addTerrainProtocol();
+    const c=map.getCenter();
+    if(!terrainMap){
+      terrainMissingTiles=0;terrainValidTiles=0;terrainLastNetworkError="";
+      terrainMap=new window.maplibregl.Map({
+        container:"map3d",style:terrainRastersStyle(),center:[c.lng,c.lat],
+        zoom:map.getZoom(),pitch:65,bearing:-20,maxPitch:80,minZoom:4,maxZoom:18,
+        antialias:true,attributionControl:false
+      });
+      terrainMap.on("load",()=>{
+        terrain3DReady=true;
+        try { terrainMap.setTerrain({source:"dem1a3d",exaggeration:1}); }
+        catch(error) { terrainMessage("3D地形を開始できません："+error.message,true); }
+        terrainBasemapLayers();
+        refresh3DObservationPoints();
+        setupTerrain3DEvents();
+        void syncDrapedGeoTIFFs3D();
+        if(terrainSwitch.checked) {
+          terrainMessage("3D表示中：DEM1Aの取得状況は表示地域によります。1m DEM提供地域のみ起伏を表示します。");
+        }
+      });
+      terrainMap.addControl(new window.maplibregl.NavigationControl({visualizePitch:true}),"top-left");
+    }else{
+      terrainMap.jumpTo({center:[c.lng,c.lat],zoom:map.getZoom(),pitch:Math.max(terrainMap.getPitch(),55)});
+      terrainMap.resize();
+      terrainBasemapLayers();
+      refresh3DObservationPoints();
+      void syncDrapedGeoTIFFs3D();
+    }
+    if(!terrainSwitch.checked||token!==terrainRequestSequence)return;
+    document.getElementById("app").classList.add("terrain-on");
+    terrainMap.resize();
+    if(selectingRetrospectivePoint)terrainContainer.classList.add("choosing-point");
+  }catch(error){
+    if(token!==terrainRequestSequence)return;
+    terrainSwitch.checked=false;
+    terrainSwitch.setAttribute("aria-checked","false");
+    terrainContainer.hidden=true;
+    document.getElementById("terrainCredits").hidden=true;
+    document.getElementById("app").classList.remove("terrain-on");
+    map.invalidateSize();
+    terrainMessage("3Dを開始できません："+error.message,true);
+  }
+}
+function deactivate3DTerrain(){
+  ++terrainRequestSequence;
+  terrainSwitch.setAttribute("aria-checked","false");
+  if(terrainMap && terrain3DReady){
+    const c=terrainMap.getCenter();map.setView([c.lat,c.lng],terrainMap.getZoom(),{animate:false});
+  }
+  terrainContainer.hidden=true;
+  document.getElementById("terrainCredits").hidden=true;
+  terrainContainer.classList.remove("choosing-point");
+  document.getElementById("app").classList.remove("terrain-on");
+  terrainMessage("");
+  if (document.getElementById("overlay3DStatus")) document.getElementById("overlay3DStatus").hidden=true;
+  map.invalidateSize();
+}
+terrainSwitch.addEventListener("change",()=>{
+  if(terrainSwitch.checked)void activate3DTerrain();
+  else deactivate3DTerrain();
+});
+// 背景地図を変更すると、3Dモードでも同じ背景地図へ切り替える。
+document.querySelectorAll('input[name="basemap"]').forEach(input=>{
+  input.addEventListener("change",()=>terrainBasemapLayers());
+});
+// 既存の登録・編集・削除・復元にも3D上の観察マーカーを同期する。
+const renderRecord2DOriginal=renderRecord;
+renderRecord=function(item){ const result=renderRecord2DOriginal(item);refresh3DObservationPoints();return result; };
+const removeRecord2DOriginal=removeRecord;
+removeRecord=async function(id){ await removeRecord2DOriginal(id);refresh3DObservationPoints(); };
+const clearDataButton3D=document.getElementById("clearData");
+clearDataButton3D.addEventListener("click",()=>setTimeout(refresh3DObservationPoints,150));
+// 3D有効時も「現在地へ移動」「現在地からデータ入力」で地図中心を更新する。
+// 元のrequestCurrentLocation()内でmap.setViewを呼ぶため、センターを3Dにも反映する。
+map.on("moveend",()=>{
+  if(!terrainSwitch.checked||!terrainMap||!terrain3DReady)return;
+  // 3D操作中はMapLibre側のmoveendが2D地図を同期する。
+  // GPS操作やフィットなどで2Dが移動した場合は、別の操作イベントで同期する。
+});
+// GPS等のsetView直後に同期する処理は既存の現在地取得コールバックから呼び出す。
+function terrainMoveTo(latlng,zoom=16){
+  if(terrainSwitch.checked&&terrainMap&&terrain3DReady){
+    terrainMap.easeTo({center:[latlng.lng,latlng.lat],zoom,duration:350});
+  }
+}
+
+
+// ===========================================================
+// 10. 位置合わせ済みGeoTIFFの3Dドレーピング
+// DEM1Aは地形高のみ。GeoTIFFの画素は標高には使わず、
+// MapLibreの位置付きimage/rasterレイヤーとして地形上へ表示。
+// 地理参照座標をWGS84/WebMercatorへ再投影して色画像を生成する。
+// ===========================================================
+const drapedGeoTIFFs = new Map(); // id -> {canvas, coordinates}
+let drapeSyncVersion = 0;
+let drapeSyncInProgress = false;
+let drapeLastError = "";
+let drapeProjLoader = null;
+const drapeStatusElement = document.getElementById("overlay3DStatus");
+const drapeCreditElement = document.getElementById("terrainOverlayCredits");
+
+function drapeStatus(text, error=false) {
+  if (!drapeStatusElement) return;
+  drapeStatusElement.textContent = text;
+  drapeStatusElement.hidden = !text || !terrainSwitch.checked;
+  drapeStatusElement.style.color = error ? "#a32929" : "#41675b";
+}
+function drapeCredits() {
+  if (!drapeCreditElement) return;
+  const names=[...externalOverlays.values()]
+    .filter(entry=>entry.item.visible!==false && (entry.item.kind==="geotiff" || entry.item.kind==="geotiff-url")
+      && terrainMap?.getLayer(drapeLayerId(entry.item.id)))
+    .map(entry=>entry.item.name);
+  drapeCreditElement.textContent=names.length ? " ｜ 重ね合わせGeoTIFF："+names.join("、") : "";
+}
+function drapeLayerId(id) { return "drape-"+String(id).replace(/[^a-zA-Z0-9_-]/g,"_"); }
+function drapeSourceId(id) { return "drape-source-"+String(id).replace(/[^a-zA-Z0-9_-]/g,"_"); }
+function removeDrapedGeoTIFF3D(id) {
+  const layerId=drapeLayerId(id), sourceId=drapeSourceId(id);
+  if (terrainMap && terrain3DReady) {
+    if (terrainMap.getLayer(layerId)) terrainMap.removeLayer(layerId);
+    if (terrainMap.getSource(sourceId)) terrainMap.removeSource(sourceId);
+  }
+  drapedGeoTIFFs.delete(id);
+  drapeCredits();
+}
+function updateDrapedOpacity3D(id) {
+  if (!terrainMap || !terrain3DReady) return;
+  const item=externalOverlays.get(id)?.item;
+  if(item && terrainMap.getLayer(drapeLayerId(id)))
+    terrainMap.setPaintProperty(drapeLayerId(id),"raster-opacity",Math.max(0,Math.min(1,Number(item.opacity??0.75))));
+}
+
+async function drapeLoadProj() {
+  if (!drapeProjLoader) drapeProjLoader=waitForScript(
+    "https://cdn.jsdelivr.net/npm/proj4@2.15.0/dist/proj4.js","proj4"
+  ).catch(error=>{drapeProjLoader=null;throw error;});
+  await drapeProjLoader;
+  // 日本の平面直角座標系 I～XIX（JGD2011/JGD2000）、石川県は VII。
+  const zones=[
+    [33,129.5],[33,131],[36,132.1666666667],[33,133.5],
+    [36,134.3333333333],[36,136],[36,137.1666666667],
+    [36,138.5],[36,139.8333333333],[40,140.8333333333],
+    [44,140.25],[44,142.25],[44,144.25],[26,142],
+    [26,127.5],[26,124],[26,131],[20,136],[26,154]
+  ];
+  for(let i=0;i<zones.length;i++) {
+    const [lat,lon]=zones[i];
+    const def=`+proj=tmerc +lat_0=${lat} +lon_0=${lon} +k=0.9999 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs`;
+    for (const prefix of [6669,2443]) {
+      const crs=`EPSG:${prefix+i}`;
+      if (!window.proj4.defs(crs)) window.proj4.defs(crs,def);
+    }
+  }
+  for(const crs of ["EPSG:6668","EPSG:4612"])
+    if(!window.proj4.defs(crs))window.proj4.defs(crs,"+proj=longlat +ellps=GRS80 +no_defs");
+}
+function drapeProjectionFn(code) {
+  const epsg=Number(String(code).replace(/^EPSG:/i,""));
+  if ([4326,6668,4612].includes(epsg)) return (lon,lat)=>[lon,lat];
+  if ([3857,900913].includes(epsg)) return (lon,lat)=>{
+    const a=6378137,phi=Math.max(-85.051128,Math.min(85.051128,lat))*Math.PI/180;
+    return [a*lon*Math.PI/180,a*Math.log(Math.tan(Math.PI/4+phi/2))];
+  };
+  if (!window.proj4 || !window.proj4.defs("EPSG:"+epsg))
+    throw new Error("GeoTIFFのEPSG:"+code+"は3D変換未対応です。QGISでEPSG:4326へ再投影して読み込んでください。");
+  return (lon,lat)=>window.proj4("EPSG:4326","EPSG:"+epsg,[lon,lat]);
+}
+function drapeMercatorY(lat) {
+  const p=Math.max(-85.051128,Math.min(85.051128,lat))*Math.PI/180;
+  return Math.log(Math.tan(Math.PI/4+p/2));
+}
+function drapeInverseMercatorY(value) {return Math.atan(Math.sinh(value))*180/Math.PI;}
+function drapeColorParser() {
+  const one=document.createElement("canvas");one.width=one.height=1;
+  const c=one.getContext("2d",{willReadFrequently:true});
+  const cache=new Map();
+  return css=>{
+    if (!css) return null;
+    if (cache.has(css)) return cache.get(css);
+    c.clearRect(0,0,1,1);
+    c.fillStyle=css;c.fillRect(0,0,1,1);
+    const d=c.getImageData(0,0,1,1).data;
+    const rgb=[d[0],d[1],d[2],d[3]];
+    if (cache.size>2048)cache.clear();
+    cache.set(css,rgb);return rgb;
+  };
+}
+async function drapeRenderGeoTIFF(item,entry) {
+  await loadRasterLibraries();
+  // ArrayBufferを複数回コピーせず、ファイルから必要な画素だけ取得可能な場合は利用する。
+  const src=item.blob || await fetchOverlayBuffer(item.url);
+  const raster=await window.parseGeoraster(src,{readOnDemand:true});
+  const epsg=raster.projection;
+  if (!epsg) throw new Error("GeoTIFFに座標参照系（EPSG）がありません。位置情報付きのTIFFが必要です。");
+  if (![4326,6668,4612,3857,900913].includes(Number(epsg))) await drapeLoadProj();
+  const toRaster=drapeProjectionFn(epsg);
+  const bounds=getOverlayBounds(entry.layer);
+  if(!bounds) throw new Error("GeoTIFFの表示範囲を取得できません。");
+  const west=bounds.getWest(),east=bounds.getEast(),north=bounds.getNorth(),south=bounds.getSouth();
+  if(![west,east,north,south].every(Number.isFinite) || east<=west || north<=south || east-west>180)
+    throw new Error("GeoTIFFの地理参照範囲が正しくありません。");
+  const mNorth=drapeMercatorY(north),mSouth=drapeMercatorY(south);
+  const mercRatio=((east-west)*Math.PI/180)/Math.max(1e-9,mNorth-mSouth);
+  const maxSide=(window.innerWidth<720 ? 900 : 1400);
+  let width,height;
+  if (mercRatio>=1) { width=maxSide; height=Math.max(64,Math.round(maxSide/mercRatio)); }
+  else { height=maxSide; width=Math.max(64,Math.round(maxSide*mercRatio)); }
+  const cap=Math.sqrt(1600000/(width*height));
+  if (cap<1) { width=Math.max(64,Math.floor(width*cap));height=Math.max(64,Math.floor(height*cap)); }
+  width=Math.min(width,1600); height=Math.min(height,1600);
+  const originalWidth=Number(raster.width),originalHeight=Number(raster.height);
+  if(!originalWidth||!originalHeight)throw new Error("GeoTIFFの画素サイズを取得できません。");
+  const sampleW=Math.min(originalWidth, Math.max(64,width));
+  const sampleH=Math.min(originalHeight, Math.max(64,height));
+  let bands;
+  if (typeof raster.getValues==="function") {
+    bands=await raster.getValues({left:0,top:0,right:originalWidth,bottom:originalHeight,
+      width:sampleW,height:sampleH,resampleMethod:"nearest"});
+  } else {
+    bands=raster.values;
+  }
+  if(!Array.isArray(bands)||!bands.length||!bands[0]?.length)
+    throw new Error("GeoTIFFの画像画素を読み込めませんでした。");
+  const actualW=bands[0][0]?.length||0,actualH=bands[0].length;
+  if(!actualW||!actualH)throw new Error("GeoTIFFの画像画素がありません。");
+  const transform=Array.isArray(raster.geotransform)&&raster.geotransform.length>=6
+    ? raster.geotransform.map(Number) : null;
+  const a=transform?.[1],b=transform?.[2],c=transform?.[4],d=transform?.[5];
+  const det=a*d-b*c;
+  const normalX=Number(raster.xmin),normalTop=Number(raster.ymax),
+        pxW=Number(raster.pixelWidth),pxH=Number(raster.pixelHeight);
+  if (!(transform && Number.isFinite(det) && Math.abs(det)>1e-18) &&
+      ![normalX,normalTop,pxW,pxH].every(Number.isFinite))
+    throw new Error("GeoTIFFの位置変換情報が不足しています。");
+  const canvas=document.createElement("canvas");canvas.width=width;canvas.height=height;
+  const ctx=canvas.getContext("2d",{willReadFrequently:true});
+  const img=ctx.createImageData(width,height),out=img.data;
+  const colorizer=overlayRasterColorizer(raster);
+  const parseColor=drapeColorParser();
+  const noData=raster.noDataValue;
+  const bandCount=bands.length;
+  let rendered=0;
+  for(let y=0;y<height;y++){
+    const lat=drapeInverseMercatorY(mNorth-(y+0.5)/height*(mNorth-mSouth));
+    for(let x=0;x<width;x++){
+      const lon=west+(x+0.5)/width*(east-west);
+      let projected;
+      try { projected=toRaster(lon,lat); }catch{continue;}
+      if(!projected||!Number.isFinite(projected[0])||!Number.isFinite(projected[1]))continue;
+      let col,row;
+      if(transform&&Number.isFinite(det)&&Math.abs(det)>1e-18){
+        const xx=projected[0]-transform[0],yy=projected[1]-transform[3];
+        col=(d*xx-b*yy)/det; row=(-c*xx+a*yy)/det;
+      }else{
+        col=(projected[0]-normalX)/pxW;
+        row=(normalTop-projected[1])/pxH;
+      }
+      if(col<0||row<0||col>=originalWidth||row>=originalHeight)continue;
+      const ix=Math.min(actualW-1,Math.floor(col*actualW/originalWidth));
+      const iy=Math.min(actualH-1,Math.floor(row*actualH/originalHeight));
+      const vals=[];
+      for(let bnd=0;bnd<bandCount;bnd++)vals.push(bands[bnd]?.[iy]?.[ix]);
+      if(!vals.length||vals.some(v=>v===undefined||v===null||!Number.isFinite(v))||
+          (noData!==undefined&&noData!==null&&vals[0]===noData))continue;
+      const css=colorizer(vals);
+      const color=parseColor(css);
+      if(!color)continue;
+      const idx=(y*width+x)*4;
+      out[idx]=color[0];out[idx+1]=color[1];out[idx+2]=color[2];
+      out[idx+3]=bandCount>=4 ? Math.max(0,Math.min(255,Math.round(Number(vals[3])))) : color[3];
+      rendered++;
+    }
+    if(y%70===0)await new Promise(resolve=>setTimeout(resolve,0));
+  }
+  if(rendered===0)throw new Error("GeoTIFFの有効な画像が見つかりません。CRSやNoData設定を確認してください。");
+  ctx.putImageData(img,0,0);
+  return {canvas,coordinates:[[west,north],[east,north],[east,south],[west,south]]};
+}
+async function syncDrapedGeoTIFFs3D() {
+  if(!terrainMap||!terrain3DReady||!terrainSwitch.checked)return;
+  ++drapeSyncVersion;
+  drapeLastError="";
+  if(drapeSyncInProgress)return;
+  drapeSyncInProgress=true;
+  try {
+    while(terrainMap && terrain3DReady && terrainSwitch.checked){
+      const roundSeq=drapeSyncVersion;
+      const wanted=new Set();
+      for(const [id,entry] of externalOverlays){
+        const item=entry.item;
+        if((item.kind==="geotiff"||item.kind==="geotiff-url")&&item.visible!==false)wanted.add(id);
+      }
+      for(const id of [...drapedGeoTIFFs.keys()]) if(!wanted.has(id))removeDrapedGeoTIFF3D(id);
+      for(const id of wanted){
+        if(!terrainSwitch.checked||!terrainMap||!terrain3DReady)break;
+        const entry=externalOverlays.get(id);
+        if(!entry || entry.item.visible===false)continue;
+        const layerId=drapeLayerId(id),sourceId=drapeSourceId(id);
+        try {
+          let data=drapedGeoTIFFs.get(id);
+          if(!data){
+            drapeStatus("3D地形用にGeoTIFFを変換中："+entry.item.name);
+            data=await drapeRenderGeoTIFF(entry.item,entry);
+            if(!terrainSwitch.checked||!terrainMap||!terrain3DReady ||
+               !externalOverlays.has(id)||externalOverlays.get(id).item.visible===false)continue;
+            drapedGeoTIFFs.set(id,data);
+          }
+          if(!terrainMap.getSource(sourceId)){
+            terrainMap.addSource(sourceId,{type:"image",coordinates:data.coordinates});
+            const src=terrainMap.getSource(sourceId);
+            src.updateImage({image:data.canvas});
+          }
+          if(!terrainMap.getLayer(layerId)){
+            terrainMap.addLayer({id:layerId,type:"raster",source:sourceId,
+              paint:{"raster-opacity":Math.max(0,Math.min(1,Number(entry.item.opacity??0.75))),
+                     "raster-fade-duration":0}},
+              terrainMap.getLayer("observations-points-3d")?"observations-points-3d":undefined);
+          }
+          updateDrapedOpacity3D(id);
+        }catch(e){
+          drapeLastError=entry.item.name+"："+e.message;
+          drapeStatus("3Dに重ねられません："+drapeLastError,true);
+          console.warn("GeoTIFFの3D貼り付け失敗",e);
+        }
+      }
+      drapeCredits();
+      if(!drapeLastError && wanted.size) drapeStatus("GeoTIFF "+wanted.size+"件を3D地形に重ねて表示中");
+      if(roundSeq===drapeSyncVersion)break;
+    }
+  }finally{drapeSyncInProgress=false;}
+}
+</script>
+</body>
+</html>
