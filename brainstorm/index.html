@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1日目 ブレスト成果</title>
+<style>
+  :root {
+    --bg: #fbfaf7; --surface: #ffffff; --text: #1f2421; --muted: #5f6b64;
+    --line: #dcdfd8; --accent: #2f6b4f; --accent-soft: #e6f0ea; --warn: #8a5a00; --warn-soft: #fbf1dc;
+    --group-bg: #f1f3ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #151916; --surface: #1d221f; --text: #e6e9e5; --muted: #a0aba4;
+      --line: #333b36; --accent: #7cc3a0; --accent-soft: #23332a; --warn: #e3b562; --warn-soft: #33291a;
+      --group-bg: #232a26;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif; line-height: 1.7;
+  }
+  main { max-width: 1040px; margin: 0 auto; padding: 32px 16px 80px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  .lead { color: var(--muted); margin: 0 0 16px; font-size: .9rem; }
+  h2 { font-size: 1.2rem; border-left: 5px solid var(--accent); padding-left: 10px; margin: 48px 0 16px; scroll-margin-top: 16px; }
+
+  nav.groups { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+  nav.groups a {
+    border: 1px solid var(--accent); color: var(--accent); border-radius: 999px;
+    padding: 2px 14px; font-size: .88rem; text-decoration: none;
+  }
+  nav.groups a:hover { background: var(--accent-soft); }
+
+  /* 一覧表 */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: .9rem; }
+  th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  thead th { background: var(--accent-soft); font-weight: 600; white-space: nowrap; }
+  tr.group-row th { background: var(--group-bg); font-size: .95rem; scroll-margin-top: 16px; }
+  tbody tr:last-child td { border-bottom: none; }
+  td.no { color: var(--muted); white-space: nowrap; }
+  td a { color: var(--accent); font-weight: 600; text-decoration: none; }
+  td a:hover { text-decoration: underline; }
+  .empty { color: var(--muted); font-style: italic; }
+
+  /* 詳細カード */
+  h3.group-title { font-size: 1.05rem; margin: 36px 0 12px; color: var(--muted); }
+  .group-note { background: var(--accent-soft); border-radius: 8px; padding: 10px 14px; margin: 0 0 16px; font-size: .9rem; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    padding: 20px 22px; margin: 0 0 20px; scroll-margin-top: 16px;
+  }
+  .card:target { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .card h4.title { margin: 0 0 2px; font-size: 1.08rem; }
+  .card .group { color: var(--muted); font-size: .82rem; margin: 0 0 8px; }
+  .card h5 { margin: 14px 0 4px; font-size: .93rem; color: var(--accent); }
+  .card ul { margin: 0; padding-left: 1.3em; }
+  .note { background: var(--warn-soft); color: var(--warn); border-radius: 6px; padding: 8px 12px; margin-top: 14px; font-size: .85rem; }
+  .note ul { padding-left: 1.2em; }
+  .back { display: inline-block; margin-top: 14px; font-size: .85rem; color: var(--muted); }
+  .back:hover { color: var(--accent); }
+  .top { margin: 0 0 12px; font-size: .88rem; }
+  .top a { color: var(--accent); text-decoration: none; }
+  .top a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<main>
+  <p class="top"><a href="../">← 勉強会トップへ戻る</a></p>
+  <h1>1日目 ブレインストーミングの成果</h1>
+  <p class="lead">
+    2026年11月7日（1日目）のブレインストーミングで、各会場のグループが「WebGISを何に使いたいか」「必要な機能」「必要なデータ」をまとめた結果です（長野：信州2班・信州B／石川／広島）。<br>
+    一覧の「やりたいこと」をクリックすると詳細へ移動します。「未記入」は集計表に記載がない項目、黄色の欄は整理時の注記です。
+  </p>
+  <nav class="groups">
+    <a href="#g-s2">長野（信州2班）</a>
+    <a href="#g-sb">長野（信州B）</a>
+    <a href="#g-is">石川</a>
+    <a href="#g-hr">広島</a>
+  </nav>
+
+  <h2 id="list">一覧</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>No.</th><th>グループ</th><th>やりたいこと</th><th>主な機能</th><th>主なデータ</th></tr>
+      </thead>
+      <tbody>
+        <!-- 信州2班 -->
+        <tr class="group-row" id="g-s2"><th colspan="5">長野（信州2班）</th></tr>
+        <tr><td class="no">S2-1</td><td>信州2班</td><td><a href="#s2-1">森林の境界確認</a></td>
+          <td>GNSS測位、ポイント・ライン追加、写真添付、CS立体図判読、3D表示、データ出力</td>
+          <td>CS立体図、公図、森林地番図、森林資源マップ</td></tr>
+        <tr><td class="no">S2-2</td><td>信州2班</td><td><a href="#s2-2">微地形から断面図</a></td>
+          <td>3D表示、植生図表示、クリックで樹種表示、垂直断面図</td>
+          <td>DEM、DSM、森林資源マップ</td></tr>
+        <tr><td class="no">S2-3</td><td>信州2班</td><td><a href="#s2-3">危険個所を自動抽出</a></td>
+          <td>大きな地形の危険度表示、傾斜量の計算</td>
+          <td>DSM、地形分類図、ハザードマップ</td></tr>
+        <tr><td class="no">S2-4</td><td>信州2班</td><td><a href="#s2-4">地図を3Dで表示（登山）</a></td>
+          <td>GPX読み込み、登山道表示、軌跡の確認</td>
+          <td>DEM、登山道データ、地理院地図</td></tr>
+        <tr><td class="no">S2-5</td><td>信州2班</td><td><a href="#s2-5">行政保有データを現場に持ち出す</a></td>
+          <td>Excel連携、連携データの選択、ネットワーク不使用のデータ転送、オフライン表示</td>
+          <td>森林簿、森林計画図、補助事業の申請データ</td></tr>
+        <tr><td class="no">S2-6</td><td>信州2班</td><td><a href="#s2-6">湧水地マップ</a></td>
+          <td>CS立体図による地形判読、ディープラーニング</td>
+          <td>CS立体図</td></tr>
+        <tr><td class="no">S2-7</td><td>信州2班</td><td><a href="#s2-7">フォレストバランスゲーム</a></td>
+          <td class="empty">未記入</td><td class="empty">未記入</td></tr>
+
+        <!-- 信州B -->
+        <tr class="group-row" id="g-sb"><th colspan="5">長野（信州B）</th></tr>
+        <tr><td class="no">SB-1</td><td>信州B</td><td><a href="#sb-1">ルート検索：安全なルート</a></td>
+          <td>GPS、ログ記録、場所の表示</td>
+          <td>林道、傾斜、雨雲レーダー</td></tr>
+        <tr><td class="no">SB-2</td><td>信州B</td><td><a href="#sb-2">ルート検索：急傾斜</a></td>
+          <td>傾斜区分表示</td>
+          <td>傾斜、雨雲レーダー</td></tr>
+        <tr><td class="no">SB-3</td><td>信州B</td><td><a href="#sb-3">ポテンシャルマップ：樹種</a></td>
+          <td>場所の表示、傾斜区分表示</td>
+          <td>傾斜、樹種、保護区</td></tr>
+        <tr><td class="no">SB-4</td><td>信州B</td><td><a href="#sb-4">ポテンシャルマップ：急傾斜</a></td>
+          <td>場所の表示、傾斜区分表示</td>
+          <td>傾斜、樹種、保護区</td></tr>
+        <tr><td class="no">SB-5</td><td>信州B</td><td><a href="#sb-5">動植物の分布：動物と植物の分布の違い</a></td>
+          <td>場所の表示、傾斜区分表示、絞り込み、動物分布、植物分布</td>
+          <td>林道、傾斜、樹種、保護区</td></tr>
+        <tr><td class="no">SB-6</td><td>信州B</td><td><a href="#sb-6">動植物の分布：水域</a></td>
+          <td>場所の表示、傾斜区分表示、絞り込み</td>
+          <td>傾斜</td></tr>
+        <tr><td class="no">SB-7</td><td>信州B</td><td><a href="#sb-7">解析：自社データ</a></td>
+          <td class="empty">未記入</td><td class="empty">未記入</td></tr>
+        <tr><td class="no">SB-8</td><td>信州B</td><td><a href="#sb-8">解析：公開データ</a></td>
+          <td class="empty">未記入</td><td class="empty">未記入</td></tr>
+
+        <!-- 石川 -->
+        <tr class="group-row" id="g-is"><th colspan="5">石川</th></tr>
+        <tr><td class="no">IS-1</td><td>石川</td><td><a href="#is-1">CS立体図・DCHMの現場閲覧／ダム貯水量の可視化</a></td>
+          <td>ダムの水位のモニタリング</td>
+          <td>CS立体図、樹冠高モデル（DCHM）、登記所備付地図、ダムの水位</td></tr>
+        <tr><td class="no">IS-2</td><td>石川</td><td><a href="#is-2">森林の経営診断ツール</a></td>
+          <td>経営シミュレーション</td>
+          <td>過去の災害履歴</td></tr>
+        <tr><td class="no">IS-3</td><td>石川</td><td><a href="#is-3">非GIS技術者向けの現場調査ツール（防災・地質）</a></td>
+          <td>Survey123に代わる調査ツール、スプレッドシートでのPOI管理、音声入力（△）</td>
+          <td class="empty">未記入</td></tr>
+        <tr><td class="no">IS-4</td><td>石川</td><td><a href="#is-4">AIを使った斜面防災研究</a></td>
+          <td>音声入力（場所・住所・時期）、時系列ごとの表示切替</td>
+          <td>住所検索</td></tr>
+        <tr><td class="no">IS-5</td><td>石川</td><td><a href="#is-5">野鳥など生物調査のデータ入力</a></td>
+          <td>選択式のデータ入力、JSON・スプレッドシート出力</td>
+          <td>二次メッシュ番号</td></tr>
+
+        <!-- 広島 -->
+        <tr class="group-row" id="g-hr"><th colspan="5">広島</th></tr>
+        <tr><td class="no">HR-1</td><td>広島</td><td><a href="#hr-1">地域づくり・まちづくりにつなげる</a></td>
+          <td class="empty">未記入</td><td class="empty">未記入</td></tr>
+        <tr><td class="no">HR-2</td><td>広島</td><td><a href="#hr-2">資源量と運送コストの可視化</a></td>
+          <td class="empty">未記入</td><td class="empty">未記入</td></tr>
+        <tr><td class="no">HR-3</td><td>広島</td><td><a href="#hr-3">木の使い方が共有・発見されるEC的な仕組み</a></td>
+          <td>伐ってよい場所の表示、ニーズの可視化、注文を受けて伐る仕組み</td>
+          <td class="empty">未記入</td></tr>
+        <tr><td class="no">HR-4</td><td>広島</td><td><a href="#hr-4">林業従事者を増やしたい</a></td>
+          <td class="empty">未記入</td><td class="empty">未記入</td></tr>
+        <tr><td class="no">HR-5</td><td>広島</td><td><a href="#hr-5">施業可否の点数化</a></td>
+          <td class="empty">未記入</td><td class="empty">未記入</td></tr>
+        <tr><td class="no">HR-6</td><td>広島</td><td><a href="#hr-6">広葉樹樹種分布の細分化</a></td>
+          <td>現地調査サポート、UAV画像取り込み、面積計測、現地までの距離・時間表示、調査時間の推定</td>
+          <td class="empty">未記入</td></tr>
+        <tr><td class="no">HR-7</td><td>広島</td><td><a href="#hr-7">道を付けたら林業適地になる場所の把握</a></td>
+          <td class="empty">未記入</td><td class="empty">未記入</td></tr>
+        <tr><td class="no">HR-8</td><td>広島</td><td><a href="#hr-8">行政区域の可視化</a></td>
+          <td class="empty">未記入</td>
+          <td>字レベルの行政境界ポリゴン、森林境界（？）</td></tr>
+        <tr><td class="no">HR-9</td><td>広島</td><td><a href="#hr-9">森林所有者・境界のDB</a></td>
+          <td class="empty">未記入</td><td class="empty">未記入</td></tr>
+        <tr><td class="no">HR-10</td><td>広島</td><td><a href="#hr-10">有害鳥獣対策を要する地域の可視化</a></td>
+          <td>目撃情報・捕獲情報の共有、処理施設までの距離、所有者の確認</td>
+          <td class="empty">未記入</td></tr>
+        <tr><td class="no">HR-11</td><td>広島</td><td><a href="#hr-11">作業道の崩れ状態の確認</a></td>
+          <td class="empty">未記入</td><td class="empty">未記入</td></tr>
+        <tr><td class="no">HR-12</td><td>広島</td><td><a href="#hr-12">ドローン風予報</a></td>
+          <td class="empty">未記入</td><td class="empty">未記入</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="detail">詳細</h2>
+
+  <!-- ===================== 信州2班 ===================== -->
+  <h3 class="group-title">長野（信州2班）</h3>
+
+  <section class="card" id="s2-1">
+    <h4 class="title">S2-1　森林の境界確認</h4>
+    <p class="group">信州2班</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>現地で森林の境界を確認したい</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul>
+      <li>GNSS測位</li>
+      <li>ポイントを追加（境界杭・目印を落とす）</li>
+      <li>ラインを追加（ポイントをつないで線にする）</li>
+      <li>写真を添付</li>
+      <li>地形判読（CS立体図で尾根線などを読む）</li>
+      <li>3D表示</li>
+      <li>データ出力</li>
+      <li>ゲーム仕立て</li>
+    </ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li>CS立体図</li><li>公図</li><li>森林地番図</li><li>森林資源マップ（樹種）</li></ul>
+    <p class="note">「ゲーム仕立て」はS2-7（フォレストバランスゲーム）の機能の可能性あり。</p>
+    <a class="back" href="#g-s2">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="s2-2">
+    <h4 class="title">S2-2　微地形から断面図</h4>
+    <p class="group">信州2班</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>微地形から断面図を作りたい（木を含めたもの）</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li>3D表示</li><li>植生図表示</li><li>クリックすると樹種が表示</li><li>線を引いて断面が見える（垂直断面図）</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li>DEM</li><li>DSM</li><li>森林資源マップ（植生図）</li></ul>
+    <a class="back" href="#g-s2">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="s2-3">
+    <h4 class="title">S2-3　危険個所を自動抽出</h4>
+    <p class="group">信州2班</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>危険個所を自動で抽出したい</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li>大きな地形の危険度が見える</li><li>傾斜量の計算</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li>DSM</li><li>地形分類図</li><li>ハザードマップ</li></ul>
+    <a class="back" href="#g-s2">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="s2-4">
+    <h4 class="title">S2-4　地図を3Dで表示（登山）</h4>
+    <p class="group">信州2班</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>登山の時に地図を3Dで見たい</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li>GPX読み込み</li><li>登山道表示</li><li>軌跡の確認</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li>DEM</li><li>登山道データ（自分の軌跡）</li><li>地理院地図</li></ul>
+    <p class="note">元メモには「楽な登山ルートを確認できる」「やまっぷを超えたい」の記述もあり。</p>
+    <a class="back" href="#g-s2">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="s2-5">
+    <h4 class="title">S2-5　行政保有データを現場に持ち出す</h4>
+    <p class="group">信州2班</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>手軽に安全に、行政保有データを現場に持ち出したい</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li>Excel連携</li><li>連携データの選択</li><li>ネットワークを使わないデータ転送（PC→スマホ）</li><li>オフライン表示</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li>森林簿</li><li>森林計画図</li><li>補助事業の申請データ</li></ul>
+    <a class="back" href="#g-s2">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="s2-6">
+    <h4 class="title">S2-6　湧水地マップ</h4>
+    <p class="group">信州2班</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>湧水地のマップを作りたい</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li>地形判読（CS立体図）</li><li>ディープラーニング</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li>CS立体図</li></ul>
+    <a class="back" href="#g-s2">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="s2-7">
+    <h4 class="title">S2-7　フォレストバランスゲーム</h4>
+    <p class="group">信州2班</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>オンラインゲーム的なもの</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <a class="back" href="#g-s2">↑ 一覧へ戻る</a>
+  </section>
+
+  <!-- ===================== 信州B ===================== -->
+  <h3 class="group-title">長野（信州B）</h3>
+
+  <section class="card" id="sb-1">
+    <h4 class="title">SB-1　ルート検索：安全なルート</h4>
+    <p class="group">信州B ／ 分類：ルート検索</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>安全なルートを検索したい</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li>GPS</li><li>ログ記録</li><li>場所の表示</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li>林道</li><li>傾斜</li><li>雨雲レーダー</li></ul>
+    <a class="back" href="#g-sb">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="sb-2">
+    <h4 class="title">SB-2　ルート検索：急傾斜</h4>
+    <p class="group">信州B ／ 分類：ルート検索</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>急傾斜を考慮したルートを検索したい</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li>傾斜区分表示</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li>傾斜</li><li>雨雲レーダー</li></ul>
+    <a class="back" href="#g-sb">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="sb-3">
+    <h4 class="title">SB-3　ポテンシャルマップ：樹種</h4>
+    <p class="group">信州B ／ 分類：ポテンシャルマップ</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>樹種のポテンシャルマップを作りたい</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li>場所の表示</li><li>傾斜区分表示</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li>傾斜</li><li>樹種</li><li>保護区</li></ul>
+    <a class="back" href="#g-sb">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="sb-4">
+    <h4 class="title">SB-4　ポテンシャルマップ：急傾斜</h4>
+    <p class="group">信州B ／ 分類：ポテンシャルマップ</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>急傾斜のポテンシャルマップを作りたい</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li>場所の表示</li><li>傾斜区分表示</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li>傾斜</li><li>樹種</li><li>保護区</li></ul>
+    <a class="back" href="#g-sb">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="sb-5">
+    <h4 class="title">SB-5　動植物の分布：動物と植物の分布の違い</h4>
+    <p class="group">信州B ／ 分類：動植物の分布</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>動物と植物の分布の違いを見たい</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li>場所の表示</li><li>傾斜区分表示</li><li>絞り込み</li><li>動物分布</li><li>植物分布</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li>林道</li><li>傾斜</li><li>樹種</li><li>保護区</li></ul>
+    <a class="back" href="#g-sb">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="sb-6">
+    <h4 class="title">SB-6　動植物の分布：水域</h4>
+    <p class="group">信州B ／ 分類：動植物の分布</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>水域の動植物の分布を見たい</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li>場所の表示</li><li>傾斜区分表示</li><li>絞り込み</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li>傾斜</li></ul>
+    <a class="back" href="#g-sb">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="sb-7">
+    <h4 class="title">SB-7　解析：自社データ</h4>
+    <p class="group">信州B ／ 分類：解析</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>自社データを解析したい</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <a class="back" href="#g-sb">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="sb-8">
+    <h4 class="title">SB-8　解析：公開データ</h4>
+    <p class="group">信州B ／ 分類：解析</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>公開データを解析したい</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <p class="note">データ欄に「希少種」が挙がっていますが、どのテーマにも〇が付いていません。</p>
+    <a class="back" href="#g-sb">↑ 一覧へ戻る</a>
+  </section>
+
+  <!-- ===================== 石川 ===================== -->
+  <h3 class="group-title">石川</h3>
+  <div class="group-note">
+    <strong>グループ全体の相談・悩み</strong>
+    <ul>
+      <li>調査地のデータカタログは作ったが、データの共有方法に悩んでいる（スプレッドシートで管理／どこに保存するか／Googleドライブでは共有できない／入力もしたい）</li>
+      <li>まずはシンプルでコンパクトなものを作りたい</li>
+    </ul>
+  </div>
+
+  <section class="card" id="is-1">
+    <h4 class="title">IS-1　CS立体図・DCHMの現場閲覧／ダム貯水量の可視化</h4>
+    <p class="group">石川 ／ 分類：森林管理</p>
+    <h5>■ やりたいこと</h5>
+    <ul>
+      <li>CS立体図やDCHMを見たい</li>
+      <li>QField（QGISのAndroid版）より手軽に使えるツールが欲しい</li>
+      <li>ダムの貯水量を可視化したい</li>
+    </ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li>ダムの水位のモニタリング</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li>CS立体図</li><li>樹冠高モデル（DCHM）</li><li>登記所備付地図</li><li>ダムの水位</li></ul>
+    <a class="back" href="#g-is">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="is-2">
+    <h4 class="title">IS-2　森林の経営診断ツール</h4>
+    <p class="group">石川 ／ 分類：森林管理</p>
+    <h5>■ やりたいこと</h5>
+    <ul>
+      <li>森林経営管理制度の運用にあたり、森林の経営診断をGISでできるツールが欲しい</li>
+      <li>地位・過去の災害履歴・経済的な変動をパラメータとして、森林をどう経営するのがベストか判定したい</li>
+    </ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li>経営シミュレーション</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li>過去の災害履歴</li></ul>
+    <p class="note">やりたいことに挙がっている「地位」「経済的な変動」のデータはデータ欄に記載がありません。</p>
+    <a class="back" href="#g-is">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="is-3">
+    <h4 class="title">IS-3　非GIS技術者向けの現場調査ツール（防災・地質）</h4>
+    <p class="group">石川 ／ 分類：防災、地質調査</p>
+    <h5>■ やりたいこと</h5>
+    <ul>
+      <li>社内でQGIS以外のツールの要望（非GIS技術者から）があり、WebGISを使いたい</li>
+      <li>能登半島地震では、差分解析など自分たちで加工したデータを現場で使えて調査が捗った。熊本地震でも活かしたい</li>
+    </ul>
+    <h5>■ 必要な機能</h5>
+    <ul>
+      <li>有償のGISサーベイ（Survey123）に代わるツール</li>
+      <li>スプレッドシートでPOIを管理</li>
+      <li>音声入力（場所・住所・時期）（△）</li>
+    </ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <a class="back" href="#g-is">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="is-4">
+    <h4 class="title">IS-4　AIを使った斜面防災研究</h4>
+    <p class="group">石川 ／ 分類：防災、地質調査</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>AIを使った斜面防災の研究に活用したい（音声入力で場所の移動や時系列の選択、メモ機能）</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li>音声入力（場所・住所・時期）</li><li>時系列ごとの表示切替</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li>住所検索</li></ul>
+    <p class="note">「住所検索機能」はデータ欄に書かれていますが、内容としては機能です（住所の位置データが必要という意味と思われます）。</p>
+    <a class="back" href="#g-is">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="is-5">
+    <h4 class="title">IS-5　野鳥など生物調査のデータ入力</h4>
+    <p class="group">石川 ／ 分類：環境、生物調査</p>
+    <h5>■ やりたいこと</h5>
+    <ul>
+      <li>音声入力で手を使わずに入力したい</li>
+      <li>野鳥の種などの入力項目を選択式にしたい</li>
+      <li>博物館など外部と共通のフォーマットで入力したい</li>
+    </ul>
+    <h5>■ 必要な機能</h5>
+    <ul>
+      <li>データ入力（種名・個体数・年齢・性別・タイムスタンプ・現在地）</li>
+      <li>JSON・スプレッドシート出力</li>
+    </ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li>二次メッシュ番号</li></ul>
+    <a class="back" href="#g-is">↑ 一覧へ戻る</a>
+  </section>
+
+  <!-- ===================== 広島 ===================== -->
+  <h3 class="group-title">広島</h3>
+  <div class="group-note"><strong>グループのキーワード：</strong>紙は「見る地図」、WebGISは「使う地図」。ECのような使い方。</div>
+
+  <section class="card" id="hr-1">
+    <h4 class="title">HR-1　地域づくり・まちづくりにつなげる</h4>
+    <p class="group">広島</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>地域づくり・まちづくりにつなげたい</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <a class="back" href="#g-hr">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="hr-2">
+    <h4 class="title">HR-2　資源量と運送コストの可視化</h4>
+    <p class="group">広島</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>資源量と運送コストを可視化したい（例：3万円以内で買えるヤマザクラが欲しい）</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <a class="back" href="#g-hr">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="hr-3">
+    <h4 class="title">HR-3　木の使い方が共有・発見されるEC的な仕組み</h4>
+    <p class="group">広島</p>
+    <h5>■ やりたいこと</h5>
+    <ul>
+      <li>「こう使うといいよね」が共有される、Eコマース的なもの、発見されるもの</li>
+      <li>こういう風に使える、というのが広まるとよい（実は生木も使える場合がある）</li>
+    </ul>
+    <h5>■ 必要な機能</h5>
+    <ul>
+      <li>伐っていい場所がどこかがわかる機能</li>
+      <li>ニーズの可視化</li>
+      <li>このぐらい家を建てる（必要量の目安）</li>
+      <li>注文があったから伐る</li>
+    </ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <a class="back" href="#g-hr">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="hr-4">
+    <h4 class="title">HR-4　林業従事者を増やしたい</h4>
+    <p class="group">広島</p>
+    <h5>■ やりたいこと</h5>
+    <ul>
+      <li>林業従事者を増やしたい</li>
+      <li>川上～川下のどこかがネックになっている。業種の復活なのか、新たに作り出すのか</li>
+    </ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <a class="back" href="#g-hr">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="hr-5">
+    <h4 class="title">HR-5　施業可否の点数化</h4>
+    <p class="group">広島</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>環境・資源条件から施業の可否を点数化したい（例：この木もらえる？→レッドゾーンなので伐れるよ、グリーンなので数年後かな）</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <p class="note">HR-3の「伐っていい場所がどこかがわかる機能」と関連が深いと思われます。</p>
+    <a class="back" href="#g-hr">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="hr-6">
+    <h4 class="title">HR-6　広葉樹樹種分布の細分化</h4>
+    <p class="group">広島</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>広葉樹の樹種分布を細分化したい</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul>
+      <li>現地調査サポート機能</li>
+      <li>UAV画像の取り込み</li>
+      <li>面積計測</li>
+      <li>現地までの距離・時間の表示</li>
+      <li>傾斜等から現地調査にかかる時間を推定</li>
+    </ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <a class="back" href="#g-hr">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="hr-7">
+    <h4 class="title">HR-7　道を付けたら林業適地になる場所の把握</h4>
+    <p class="group">広島</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>道を付けたら林業適地になる場所がどこかわかるようにしたい（行政が道を付けるための判断材料）</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <a class="back" href="#g-hr">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="hr-8">
+    <h4 class="title">HR-8　行政区域の可視化</h4>
+    <p class="group">広島</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>行政区域を可視化したい（○○の何丁目までがどの範囲か。地域活動のため）</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li>字レベルの行政境界ポリゴン</li><li>森林境界（？）</li></ul>
+    <p class="note">集計表のファイルによってテーマの列の並びが異なっていたため、データの対応は内容から判断しました。「森林境界？」はHR-9（森林所有者・境界のDB）向けの可能性もあります。</p>
+    <a class="back" href="#g-hr">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="hr-9">
+    <h4 class="title">HR-9　森林所有者・境界のDB</h4>
+    <p class="group">広島</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>森林所有者・境界のデータベースを作りたい</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <a class="back" href="#g-hr">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="hr-10">
+    <h4 class="title">HR-10　有害鳥獣対策を要する地域の可視化</h4>
+    <p class="group">広島</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>有害鳥獣対策が必要な地域を可視化したい（現状は猟師の経験と勘）</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul>
+      <li>目撃情報の共有</li>
+      <li>捕獲情報の共有</li>
+      <li>処理施設までの距離（何時間以内にさばけるか）</li>
+      <li>所有者の確認（例：この柿の木は切っていいのか）</li>
+      <li>口で伝わらなかったことが伝わる</li>
+    </ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <a class="back" href="#g-hr">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="hr-11">
+    <h4 class="title">HR-11　作業道の崩れ状態の確認</h4>
+    <p class="group">広島</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>作業道の崩れの状態を確認したい</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <a class="back" href="#g-hr">↑ 一覧へ戻る</a>
+  </section>
+
+  <section class="card" id="hr-12">
+    <h4 class="title">HR-12　ドローン風予報</h4>
+    <p class="group">広島</p>
+    <h5>■ やりたいこと</h5>
+    <ul><li>ドローン飛行のための風予報を見たい</li></ul>
+    <h5>■ 必要な機能</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <h5>■ 必要なデータ</h5>
+    <ul><li class="empty">未記入</li></ul>
+    <a class="back" href="#g-hr">↑ 一覧へ戻る</a>
+  </section>
+</main>
+</body>
+</html>
